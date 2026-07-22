@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Enterprise Knowledge Base — RAG Assistant</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #334155; border-radius: 9999px; }
+  ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+  .dropzone-active { border-color: #6366f1 !important; background-color: rgba(99, 102, 241, 0.08) !important; }
+
+  @keyframes fade-in-up {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .msg-in { animation: fade-in-up 0.2s ease-out; }
+
+  textarea#question-input { field-sizing: content; }
+</style>
+</head>
+<body class="h-full bg-slate-950 text-slate-100 antialiased">
+  <div class="h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="shrink-0 border-b border-slate-800 bg-slate-900/60 backdrop-blur px-6 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="h-9 w-9 rounded-lg bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-950">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5 text-white">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 2a4 4 0 0 0-4 4v1a4 4 0 0 0 0 8v1a4 4 0 1 0 8 0v-1a4 4 0 0 0 0-8V6a4 4 0 0 0-4-4Z" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12M8 9H6a2 2 0 0 0-2 2v0a2 2 0 0 0 2 2h2M16 9h2a2 2 0 0 1 2 2v0a2 2 0 0 1-2 2h-2" />
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-sm font-semibold tracking-wide text-slate-100">Enterprise Knowledge Base</h1>
+          <p class="text-xs text-slate-400">RAG Assistant · Gemini 2.5 Flash · ChromaDB</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 text-xs text-slate-400">
+        <span id="status-dot" class="h-2 w-2 rounded-full bg-slate-600"></span>
+        <span id="status-label">Checking API…</span>
+      </div>
+    </header>
+
+    <!-- Main -->
+    <main class="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[400px_1fr]">
+
+      <!-- Left: Knowledge Upload -->
+      <aside class="border-b lg:border-b-0 lg:border-r border-slate-800 bg-slate-900/30 p-5 flex flex-col gap-4 overflow-y-auto">
+        <div>
+          <h2 class="text-sm font-semibold text-slate-200">Knowledge Upload</h2>
+          <p class="text-xs text-slate-500 mt-0.5">Upload PDF documents to index them into the vector store.</p>
+        </div>
+
+        <!-- Dropzone -->
+        <div id="dropzone"
+             class="cursor-pointer rounded-xl border-2 border-dashed border-slate-700 bg-slate-900/50 hover:border-slate-600 transition-colors px-4 py-8 flex flex-col items-center justify-center text-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-9 w-9 text-slate-500">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 16V4m0 0L7 9m5-5 5 5M4 20h16" />
+          </svg>
+          <p class="text-sm text-slate-300"><span class="text-indigo-400 font-medium">Click to browse</span> or drag &amp; drop</p>
+          <p class="text-xs text-slate-500">PDF only · max 10 MB</p>
+          <input id="file-input" type="file" accept="application/pdf" class="hidden" />
+        </div>
+
+        <div id="selected-file" class="hidden text-xs text-slate-300 bg-slate-800/60 rounded-lg px-3 py-2 truncate"></div>
+
+        <button id="upload-btn" disabled
+          class="w-full rounded-lg bg-indigo-600 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-white text-sm font-medium py-2.5 transition-colors hover:bg-indigo-500">
+          Upload &amp; Index Document
+        </button>
+
+        <!-- Progress -->
+        <div id="progress-section" class="hidden flex flex-col gap-2">
+          <div class="h-1.5 w-full rounded-full bg-slate-800 overflow-hidden">
+            <div id="progress-bar" class="h-full bg-indigo-500 transition-all duration-500" style="width: 0%"></div>
+          </div>
+          <p id="stage-text" class="text-xs text-slate-400 flex items-center gap-1.5">
+            <span class="inline-block h-1.5 w-1.5 rounded-full bg-indigo-400 animate-pulse"></span>
+            Uploading…
+          </p>
+        </div>
+
+        <div id="upload-error" class="hidden text-xs text-red-300 bg-red-950/50 border border-red-900 rounded-lg px-3 py-2"></div>
+
+        <div id="upload-success" class="hidden text-xs text-emerald-300 bg-emerald-950/40 border border-emerald-900 rounded-lg px-3 py-2"></div>
+
+        <!-- Indexed documents -->
+        <div class="mt-2">
+          <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Indexed Documents</h3>
+          <ul id="indexed-list" class="flex flex-col gap-1.5 text-xs text-slate-300">
+            <li class="text-slate-600 italic">No documents indexed yet.</li>
+          </ul>
+        </div>
+      </aside>
+
+      <!-- Right: Chat -->
+      <section class="flex flex-col min-h-0">
+        <div id="messages" class="flex-1 overflow-y-auto px-6 py-6 flex flex-col gap-4">
+          <div id="empty-state" class="m-auto text-center text-slate-500 max-w-sm">
+            <p class="text-sm">Upload a PDF on the left, then ask a question about it here.</p>
+          </div>
+        </div>
+
+        <form id="chat-form" class="shrink-0 border-t border-slate-800 bg-slate-900/40 p-4">
+          <div class="flex items-end gap-2 max-w-3xl mx-auto">
+            <textarea id="question-input" rows="1" placeholder="Ask a question about your uploaded documents…"
+              class="flex-1 resize-none max-h-40 rounded-xl bg-slate-800/70 border border-slate-700 focus:border-indigo-500 focus:outline-none text-sm px-4 py-3 text-slate-100 placeholder:text-slate-500"></textarea>
+            <button id="send-btn" type="submit"
+              class="rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-white h-11 px-4 flex items-center justify-center transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 19V5M5 12l7-7 7 7" />
+              </svg>
+            </button>
+          </div>
+          <p class="text-center text-[11px] text-slate-600 mt-2">Answers are grounded only in your uploaded documents.</p>
+        </form>
+      </section>
+    </main>
+  </div>
+
+<script>
+(function () {
+  const UPLOAD_STAGES = ['Uploading…', 'Parsing PDF…', 'Cleaning…', 'Chunking…', 'Generating Embeddings…', 'Saving to ChromaDB…'];
+  const CHAT_STAGES = ['Searching Knowledge Base…', 'Building Context…', 'Thinking…', 'Generating Answer…'];
+  const MAX_FILE_SIZE = 10 * 1024 * 1024;
+
+  // ---------- Elements ----------
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('file-input');
+  const selectedFileEl = document.getElementById('selected-file');
+  const uploadBtn = document.getElementById('upload-btn');
+  const progressSection = document.getElementById('progress-section');
+  const progressBar = document.getElementById('progress-bar');
+  const stageText = document.getElementById('stage-text');
+  const uploadErrorEl = document.getElementById('upload-error');
+  const uploadSuccessEl = document.getElementById('upload-success');
+  const indexedListEl = document.getElementById('indexed-list');
+
+  const messagesEl = document.getElementById('messages');
+  const emptyStateEl = document.getElementById('empty-state');
+  const chatForm = document.getElementById('chat-form');
+  const questionInput = document.getElementById('question-input');
+  const sendBtn = document.getElementById('send-btn');
+
+  const statusDot = document.getElementById('status-dot');
+  const statusLabel = document.getElementById('status-label');
+
+  let selectedFile = null;
+
+  // ---------- Health check ----------
+  fetch('/health').then((res) => {
+    if (!res.ok) throw new Error();
+    statusDot.className = 'h-2 w-2 rounded-full bg-emerald-500';
+    statusLabel.textContent = 'API online';
+  }).catch(() => {
+    statusDot.className = 'h-2 w-2 rounded-full bg-red-500';
+    statusLabel.textContent = 'API unreachable';
+  });
+
+  // ---------- Upload: dropzone interactions ----------
+  dropzone.addEventListener('click', () => fileInput.click());
+
+  ['dragenter', 'dragover'].forEach((evt) => {
+    dropzone.addEventListener(evt, (e) => {
+      e.preventDefault();
+      dropzone.classList.add('dropzone-active');
+    });
+  });
+
+  ['dragleave', 'drop'].forEach((evt) => {
+    dropzone.addEventListener(evt, (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('dropzone-active');
+    });
+  });
+
+  dropzone.addEventListener('drop', (e) => {
+    const file = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (file) setSelectedFile(file);
+  });
+
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files[0]) setSelectedFile(fileInput.files[0]);
+  });
+
+  function setSelectedFile(file) {
+    hideUploadError();
+    hideUploadSuccess();
+
+    if (file.type !== 'application/pdf') {
+      showUploadError('Only PDF files are supported.');
+      return;
+    }
+    if (file.size > MAX_FILE_SIZE) {
+      showUploadError('File exceeds the 10 MB limit.');
+      return;
+    }
+
+    selectedFile = file;
+    selectedFileEl.textContent = `${file.name} · ${(file.size / (1024 * 1024)).toFixed(2)} MB`;
+    selectedFileEl.classList.remove('hidden');
+    uploadBtn.disabled = false;
+  }
+
+  function showUploadError(message) {
+    uploadErrorEl.textContent = message;
+    uploadErrorEl.classList.remove('hidden');
+  }
+  function hideUploadError() {
+    uploadErrorEl.classList.add('hidden');
+  }
+  function showUploadSuccess(message) {
+    uploadSuccessEl.textContent = message;
+    uploadSuccessEl.classList.remove('hidden');
+  }
+  function hideUploadSuccess() {
+    uploadSuccessEl.classList.add('hidden');
+  }
+
+  function addIndexedDocument(filename, pageCount, chunksIndexed) {
+    if (indexedListEl.children.length === 1 && indexedListEl.children[0].dataset.placeholder) {
+      indexedListEl.innerHTML = '';
+    }
+    const li = document.createElement('li');
+    li.className = 'flex items-center justify-between gap-2 bg-slate-800/50 rounded-lg px-3 py-2';
+    li.innerHTML = `
+      <span class="truncate">${escapeHtml(filename)}</span>
+      <span class="text-slate-500 shrink-0">${pageCount}p · ${chunksIndexed} chunks</span>
+    `;
+    indexedListEl.prepend(li);
+  }
+
+  // mark the initial placeholder so it can be cleared on first real doc
+  indexedListEl.children[0].dataset.placeholder = 'true';
+
+  uploadBtn.addEventListener('click', handleUpload);
+
+  async function handleUpload() {
+    if (!selectedFile) return;
+
+    uploadBtn.disabled = true;
+    hideUploadError();
+    hideUploadSuccess();
+    progressSection.classList.remove('hidden');
+
+    let stageIndex = 0;
+    stageText.innerHTML = `<span class="inline-block h-1.5 w-1.5 rounded-full bg-indigo-400 animate-pulse"></span> ${UPLOAD_STAGES[0]}`;
+    progressBar.style.width = '8%';
+
+    const stageTimer = setInterval(() => {
+      stageIndex = Math.min(stageIndex + 1, UPLOAD_STAGES.length - 1);
+      stageText.innerHTML = `<span class="inline-block h-1.5 w-1.5 rounded-full bg-indigo-400 animate-pulse"></span> ${UPLOAD_STAGES[stageIndex]}`;
+      progressBar.style.width = `${Math.min(92, ((stageIndex + 1) / UPLOAD_STAGES.length) * 100)}%`;
+    }, 900);
+
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+
+    try {
+      const res = await fetch('/knowledge/upload', { method: 'POST', body: formData });
+      const data = await res.json().catch(() => ({}));
+
+      clearInterval(stageTimer);
+
+      if (!res.ok) {
+        throw new Error(Array.isArray(data.message) ? data.message.join(', ') : (data.message || 'Upload failed.'));
+      }
+
+      progressBar.style.width = '100%';
+      stageText.textContent = 'Knowledge Base Ready ✓';
+      showUploadSuccess(`"${data.filename}" indexed — ${data.pageCount} pages, ${data.chunksIndexed} chunks.`);
+      addIndexedDocument(data.filename, data.pageCount, data.chunksIndexed);
+
+      selectedFile = null;
+      fileInput.value = '';
+      selectedFileEl.classList.add('hidden');
+    } catch (err) {
+      clearInterval(stageTimer);
+      showUploadError(err.message || 'Something went wrong while uploading.');
+    } finally {
+      uploadBtn.disabled = false;
+      setTimeout(() => progressSection.classList.add('hidden'), 1800);
+    }
+  }
+
+  // ---------- Chat ----------
+  function scrollToBottom() {
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function appendMessage(role, text, sources) {
+    if (emptyStateEl) emptyStateEl.remove();
+
+    const column = document.createElement('div');
+    column.className = `msg-in flex flex-col gap-1.5 ${role === 'user' ? 'items-end' : 'items-start'}`;
+
+    const bubble = document.createElement('div');
+    bubble.className = role === 'user'
+      ? 'max-w-[75%] rounded-2xl rounded-br-sm bg-indigo-600 text-white px-4 py-2.5 text-sm shadow whitespace-pre-wrap'
+      : 'max-w-[75%] rounded-2xl rounded-bl-sm bg-slate-800 text-slate-100 px-4 py-2.5 text-sm shadow whitespace-pre-wrap';
+    bubble.textContent = text;
+    column.appendChild(bubble);
+
+    if (sources && sources.length > 0) {
+      const srcRow = document.createElement('div');
+      srcRow.className = 'flex flex-wrap gap-1.5 pl-1';
+      sources.forEach((source) => {
+        const chip = document.createElement('span');
+        chip.className = 'text-[11px] text-slate-400 bg-slate-800/60 border border-slate-700 rounded-full px-2 py-0.5 flex items-center gap-1';
+        chip.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3 w-3">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6M9 8h1M7 4h10a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z" />
+          </svg>
+          ${escapeHtml(source)}
+        `;
+        srcRow.appendChild(chip);
+      });
+      column.appendChild(srcRow);
+    }
+
+    messagesEl.appendChild(column);
+    scrollToBottom();
+  }
+
+  function createTypingIndicator() {
+    const column = document.createElement('div');
+    column.className = 'msg-in flex flex-col gap-1 items-start';
+
+    const bubble = document.createElement('div');
+    bubble.className = 'rounded-2xl rounded-bl-sm bg-slate-800 px-4 py-3 shadow flex items-center gap-1.5';
+    bubble.innerHTML = `
+      <span class="h-1.5 w-1.5 rounded-full bg-slate-400 animate-bounce" style="animation-delay:-0.3s"></span>
+      <span class="h-1.5 w-1.5 rounded-full bg-slate-400 animate-bounce" style="animation-delay:-0.15s"></span>
+      <span class="h-1.5 w-1.5 rounded-full bg-slate-400 animate-bounce"></span>
+    `;
+
+    const label = document.createElement('span');
+    label.className = 'text-xs text-slate-500 pl-1';
+    label.textContent = CHAT_STAGES[0];
+
+    column.appendChild(bubble);
+    column.appendChild(label);
+    return { column, label };
+  }
+
+  function setInputDisabled(disabled) {
+    questionInput.disabled = disabled;
+    sendBtn.disabled = disabled;
+  }
+
+  function autoResizeTextarea() {
+    questionInput.style.height = 'auto';
+    questionInput.style.height = `${Math.min(questionInput.scrollHeight, 160)}px`;
+  }
+  questionInput.addEventListener('input', autoResizeTextarea);
+
+  questionInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      chatForm.requestSubmit();
+    }
+  });
+
+  chatForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const question = questionInput.value.trim();
+    if (!question) return;
+    handleSend(question);
+  });
+
+  async function handleSend(question) {
+    appendMessage('user', question, []);
+    questionInput.value = '';
+    autoResizeTextarea();
+    setInputDisabled(true);
+
+    const { column: indicator, label } = createTypingIndicator();
+    messagesEl.appendChild(indicator);
+    scrollToBottom();
+
+    let stageIndex = 0;
+    const stageTimer = setInterval(() => {
+      stageIndex = Math.min(stageIndex + 1, CHAT_STAGES.length - 1);
+      label.textContent = CHAT_STAGES[stageIndex];
+    }, 700);
+
+    try {
+      const res = await fetch('/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question }),
+      });
+      const data = await res.json().catch(() => ({}));
+
+      clearInterval(stageTimer);
+      indicator.remove();
+
+      if (!res.ok) {
+        const message = Array.isArray(data.message) ? data.message.join(', ') : (data.message || 'Something went wrong.');
+        appendMessage('assistant', message, []);
+        return;
+      }
+
+      appendMessage('assistant', data.answer, data.sources || []);
+    } catch (err) {
+      clearInterval(stageTimer);
+      indicator.remove();
+      appendMessage('assistant', 'Network error — please check your connection and try again.', []);
+    } finally {
+      setInputDisabled(false);
+      questionInput.focus();
+    }
+  }
+})();
+</script>
+</body>
+</html>

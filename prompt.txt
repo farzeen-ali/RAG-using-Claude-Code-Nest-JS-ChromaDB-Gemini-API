@@ -1,0 +1,513 @@
+You are a Principal AI Backend Engineer, Senior NestJS Architect, and Production AI Systems Designer.
+
+Build a production-ready Enterprise Retrieval-Augmented Generation (RAG) application.
+
+This project is the foundation of an AI Engineering course and will be extended in future lessons with Ragas evaluation, Redis memory, hybrid search, and production monitoring.
+
+Design the project so future features can be added without major refactoring.
+
+====================================================
+OBJECTIVE
+====================================================
+
+Build a complete Enterprise Knowledge Base Chatbot.
+
+The application should allow users to upload PDF documents, index them into ChromaDB, and ask questions that are answered using Retrieval-Augmented Generation (RAG) with Gemini 2.5 Flash.
+
+The project should be clean, secure, modular, scalable and production-ready.
+
+====================================================
+TECH STACK
+====================================================
+
+Backend
+
+- NestJS
+- TypeScript
+- @google/genai
+- Gemini 2.5 Flash
+- ChromaDB
+- @nestjs/config
+- Multer
+- pdf-parse
+- class-validator
+- class-transformer
+
+Frontend
+
+- HTML
+- Tailwind CSS
+- Vanilla JavaScript
+
+Do NOT use
+
+- React
+- Next.js
+- Redis
+- Docker
+- BullMQ
+
+====================================================
+SECURITY REQUIREMENTS
+====================================================
+
+Never expose API keys.
+
+Read Gemini API key from
+
+.env
+
+Validate every request.
+
+Reject empty prompts.
+
+Reject unsupported files.
+
+Allow PDF uploads only.
+
+Maximum upload size:
+
+10 MB
+
+Handle every exception gracefully.
+
+Return proper HTTP status codes.
+
+Never crash the application.
+
+Use DTO validation.
+
+Use clean service separation.
+
+====================================================
+PROJECT FEATURES
+====================================================
+
+Create two endpoints.
+
+----------------------------------------------------
+
+POST
+
+/knowledge/upload
+
+----------------------------------------------------
+
+Accept
+
+multipart/form-data
+
+Field
+
+file
+
+Workflow
+
+1.
+
+Upload PDF
+
+↓
+
+2.
+
+Extract text
+
+↓
+
+3.
+
+Clean text
+
+↓
+
+4.
+
+Convert to Markdown
+
+↓
+
+5.
+
+Generate embeddings using Gemini embedding model
+
+↓
+
+6.
+
+Store embeddings inside ChromaDB
+
+Include metadata
+
+- filename
+
+- page count
+
+- upload timestamp
+
+- chunk id
+
+Return success response.
+
+----------------------------------------------------
+
+POST
+
+/chat
+
+----------------------------------------------------
+
+Request
+
+{
+    "question":"What is Artificial Intelligence?"
+}
+
+Workflow
+
+Receive question
+
+↓
+
+Generate embedding
+
+↓
+
+Search ChromaDB
+
+↓
+
+Retrieve most relevant chunks
+
+↓
+
+Build final context
+
+↓
+
+Generate answer using Gemini 2.5 Flash
+
+↓
+
+Return
+
+{
+    "answer":"",
+    "sources":[]
+}
+
+====================================================
+CHUNKING
+====================================================
+
+Implement recursive chunking.
+
+Chunk size
+
+800 characters
+
+Overlap
+
+150 characters
+
+Keep headings whenever possible.
+
+Never split sentences unnecessarily.
+
+====================================================
+EMBEDDINGS
+====================================================
+
+Use Gemini Embedding Model.
+
+Create embeddings for every chunk.
+
+Store
+
+text
+
+embedding
+
+metadata
+
+inside ChromaDB.
+
+====================================================
+RETRIEVAL
+====================================================
+
+When user asks a question
+
+Generate embedding
+
+↓
+
+Search ChromaDB
+
+↓
+
+Return Top 5 similar chunks
+
+↓
+
+Assemble context
+
+↓
+
+Send context to Gemini
+
+↓
+
+Generate answer.
+
+====================================================
+PROMPT ENGINEERING
+====================================================
+
+Use a secure system prompt.
+
+The assistant must
+
+Answer ONLY from retrieved context.
+
+Never invent information.
+
+If answer is unavailable
+
+reply
+
+"I couldn't find this information in the uploaded knowledge base."
+
+Never hallucinate.
+
+====================================================
+FRONTEND
+====================================================
+
+Create a professional interface.
+
+Use Tailwind CSS.
+
+Layout
+
+Left
+
+Knowledge Upload
+
+Right
+
+AI Chat
+
+Knowledge Upload
+
+Drag & Drop Upload
+
+Upload Button
+
+Progress Indicator
+
+Success Message
+
+AI Chat
+
+ChatGPT-like interface
+
+Question textbox
+
+Send button
+
+Typing animation
+
+Scrollable conversation
+
+Auto-scroll
+
+Loading spinner
+
+Show retrieved source filenames.
+
+====================================================
+USER EXPERIENCE
+====================================================
+
+After upload
+
+Display
+
+Uploading...
+
+↓
+
+Parsing PDF...
+
+↓
+
+Cleaning...
+
+↓
+
+Chunking...
+
+↓
+
+Generating Embeddings...
+
+↓
+
+Saving to ChromaDB...
+
+↓
+
+Knowledge Base Ready
+
+While chatting
+
+Show
+
+Searching Knowledge Base...
+
+↓
+
+Building Context...
+
+↓
+
+Thinking...
+
+↓
+
+Generating Answer...
+
+====================================================
+PROJECT STRUCTURE
+====================================================
+
+Follow production NestJS architecture.
+
+Separate
+
+Controllers
+
+Services
+
+DTOs
+
+Utilities
+
+Configuration
+
+Embedding Service
+
+Vector Service
+
+PDF Service
+
+Chunking Service
+
+Prompt Builder
+
+RAG Service
+
+====================================================
+CODE QUALITY
+====================================================
+
+Use
+
+Dependency Injection
+
+SOLID principles
+
+Reusable services
+
+Meaningful naming
+
+Production folder structure
+
+Clean comments only where necessary.
+
+====================================================
+FUTURE EXTENSIBILITY
+====================================================
+
+Design the architecture so these can be added later WITHOUT changing existing code.
+
+Video 21
+
+- Ragas Evaluation
+
+Video 22
+
+- Redis Memory
+
+Future
+
+- Pinecone
+
+- Hybrid Search
+
+- Metadata Filtering
+
+- Streaming Responses
+
+- Authentication
+
+- Multiple Users
+
+- Conversation History
+
+- Rate Limiting
+
+- Caching
+
+- Observability
+
+====================================================
+OUTPUT
+====================================================
+
+Generate the COMPLETE PROJECT.
+
+Do not ask questions.
+
+Explain every generated file.
+
+At the end provide
+
+1.
+
+npm install
+
+2.
+
+.env example
+
+3.
+
+How to install ChromaDB
+
+4.
+
+How to start ChromaDB
+
+5.
+
+How to run NestJS
+
+6.
+
+Browser URL
+
+7.
+
+How to test PDF upload
+
+8.
+
+How to test chat
+
+9.
+
+Complete architecture diagram.
+
+The final application should look like a real Enterprise AI Knowledge Base instead of a tutorial project.
