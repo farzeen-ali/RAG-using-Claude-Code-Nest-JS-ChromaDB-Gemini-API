@@ -10,6 +10,7 @@ import { AppConfig } from '../../config/configuration';
 import { NoopEmbeddingFunction } from './noop-embedding-function';
 import {
   ChunkMetadata,
+  IndexedChunk,
   IVectorStore,
   RetrievedChunk,
   VectorRecord,
@@ -86,6 +87,22 @@ export class ChromaVectorStoreService implements IVectorStore, OnModuleInit {
         text,
         metadata: metadata as unknown as ChunkMetadata,
         distance: distances[i] ?? 0,
+      });
+    }
+
+    return chunks;
+  }
+
+  async getAllChunks(): Promise<IndexedChunk[]> {
+    const result = await this.getCollection().get();
+    const chunks: IndexedChunk[] = [];
+
+    for (const row of result.rows()) {
+      if (!row.document || !row.metadata) continue;
+      chunks.push({
+        id: row.id,
+        text: row.document,
+        metadata: row.metadata as unknown as ChunkMetadata,
       });
     }
 

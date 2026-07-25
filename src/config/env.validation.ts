@@ -63,6 +63,11 @@ class EnvironmentVariables {
   @IsInt()
   @Min(1)
   RETRIEVAL_TOP_K?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  RETRIEVAL_CANDIDATE_K?: number;
 }
 
 // Fails fast on boot with a readable error instead of surfacing missing-config

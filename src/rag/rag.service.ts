@@ -4,19 +4,15 @@ import {
   Injectable,
   Logger,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
-import { AppConfig } from '../config/configuration';
 import { cleanExtractedText } from '../common/utils/text-cleaner.util';
 import { convertToMarkdown } from '../common/utils/markdown-converter.util';
+import { BM25Service } from './retrieval/bm25.service';
+import { RetrievalPipelineService } from './retrieval/retrieval-pipeline.service';
+import type { ConfidenceLevel } from './retrieval/retrieval.types';
 import { ChunkingService } from './chunking/chunking.service';
 import { EmbeddingService } from './embedding/embedding.service';
-import { GeminiService } from './llm/gemini.service';
 import { PdfService } from './pdf/pdf.service';
-import {
-  NO_ANSWER_MESSAGE,
-  PromptBuilderService,
-} from './prompt/prompt-builder.service';
 import { VECTOR_STORE } from './vector-store/vector-store.interface';
 import type {
   IVectorStore,
@@ -34,29 +30,28 @@ export interface IngestResult {
 export interface AnswerResult {
   answer: string;
   sources: string[];
+  confidence: ConfidenceLevel;
 }
 
 /**
- * Orchestrates the two RAG workflows (ingestion and question-answering) by
- * composing the single-purpose services below. Controllers only ever talk
- * to this service — none of them know about PDFs, Chroma, or Gemini directly.
+ * Public facade for the two RAG workflows. Controllers only ever talk to
+ * this service. Ingestion logic (PDF -> clean -> chunk -> embed -> index)
+ * lives here; question-answering is delegated entirely to
+ * RetrievalPipelineService, which owns the hybrid search + rerank +
+ * generation pipeline and its own staged logging.
  */
 @Injectable()
 export class RagService {
   private readonly logger = new Logger(RagService.name);
-  private readonly topK: number;
 
   constructor(
     private readonly pdfService: PdfService,
     private readonly chunkingService: ChunkingService,
     private readonly embeddingService: EmbeddingService,
-    private readonly geminiService: GeminiService,
-    private readonly promptBuilder: PromptBuilderService,
+    private readonly bm25Service: BM25Service,
+    private readonly retrievalPipeline: RetrievalPipelineService,
     @Inject(VECTOR_STORE) private readonly vectorStore: IVectorStore,
-    private readonly configService: ConfigService<AppConfig, true>,
-  ) {
-    this.topK = this.configService.get('retrieval.topK', { infer: true });
-  }
+  ) {}
 
   async ingestDocument(file: Express.Multer.File): Promise<IngestResult> {
     const { text, pageCount } = await this.pdfService.extractText(file.buffer);
@@ -91,6 +86,16 @@ export class RagService {
 
     await this.vectorStore.upsertChunks(records);
 
+    // Keeps BM25 keyword search in sync immediately, without waiting for a
+    // server restart to re-warm the index from the vector store.
+    this.bm25Service.addChunks(
+      records.map((record) => ({
+        id: record.id,
+        text: record.text,
+        metadata: record.metadata,
+      })),
+    );
+
     this.logger.log(
       `Indexed "${file.originalname}" into ${records.length} chunks (${pageCount} pages).`,
     );
@@ -105,28 +110,6 @@ export class RagService {
   }
 
   async answerQuestion(question: string): Promise<AnswerResult> {
-    const queryEmbedding = await this.embeddingService.embedQuery(question);
-    const chunks = await this.vectorStore.querySimilar(
-      queryEmbedding,
-      this.topK,
-    );
-
-    if (chunks.length === 0) {
-      return { answer: NO_ANSWER_MESSAGE, sources: [] };
-    }
-
-    const { systemInstruction, userPrompt } = this.promptBuilder.buildPrompt(
-      question,
-      chunks,
-    );
-    const answer = await this.geminiService.generateAnswer(
-      systemInstruction,
-      userPrompt,
-    );
-    const sources = [
-      ...new Set(chunks.map((chunk) => chunk.metadata.filename)),
-    ];
-
-    return { answer, sources };
+    return this.retrievalPipeline.run(question);
   }
 }

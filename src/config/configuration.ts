@@ -19,6 +19,7 @@ export interface AppConfig {
   };
   retrieval: {
     topK: number;
+    candidateK: number;
   };
 }
 
@@ -47,5 +48,6 @@ export default (): AppConfig => ({
   },
   retrieval: {
     topK: parseInt(process.env.RETRIEVAL_TOP_K ?? '5', 10),
+    candidateK: parseInt(process.env.RETRIEVAL_CANDIDATE_K ?? '10', 10),
   },
 });

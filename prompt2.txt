@@ -1,0 +1,309 @@
+You are a Principal AI Backend Engineer, Senior NestJS Architect, AI Security Engineer and RAG Systems Expert.
+
+We already have a working Production RAG application built using:
+
+- NestJS
+- Gemini 2.5 Flash
+- ChromaDB
+- PDF Upload
+- Recursive Chunking
+- Embeddings
+- Semantic Search
+- HTML + Tailwind Frontend
+
+DO NOT rebuild the project.
+
+ONLY extend the existing project.
+
+====================================================
+GOAL
+====================================================
+
+Upgrade the existing RAG into a Production Hybrid Search System.
+
+The application should become significantly more accurate while keeping the architecture clean, modular and future-ready.
+
+====================================================
+DO NOT CHANGE
+====================================================
+
+Do not break existing APIs.
+
+Do not change the folder structure unnecessarily.
+
+Do not remove any existing feature.
+
+Preserve all current functionality.
+
+====================================================
+FEATURE 1
+====================================================
+
+Implement Hybrid Search.
+
+Instead of only vector similarity,
+
+combine
+
+1. Semantic Vector Search
+2. BM25 Keyword Search
+
+Workflow
+
+User Question
+
+↓
+
+Generate Embedding
+
+↓
+
+Vector Search (Top 10)
+
++
+
+BM25 Search (Top 10)
+
+↓
+
+Merge Results
+
+↓
+
+Remove Duplicate Chunks
+
+↓
+
+Continue Pipeline
+
+====================================================
+FEATURE 2
+====================================================
+
+Implement a Re-ranking Layer.
+
+Create
+
+RerankService
+
+The service should score retrieved chunks.
+
+Ranking factors
+
+- Semantic Similarity
+- Keyword Match
+- Metadata Quality
+
+Return only
+
+Top 5 chunks.
+
+Design this service so Cohere Re-rank can replace it later without changing the rest of the project.
+
+====================================================
+FEATURE 3
+====================================================
+
+Future Cohere Integration
+
+Create
+
+CohereRerankProvider
+
+Interface only.
+
+Do NOT require a Cohere API key.
+
+Document clearly where Cohere can be plugged in later.
+
+Use dependency inversion.
+
+====================================================
+FEATURE 4
+====================================================
+
+Improve Prompt Builder
+
+The LLM should receive
+
+System Prompt
+
+Retrieved Context
+
+User Question
+
+Instructions
+
+The assistant must
+
+Only answer from context.
+
+Never hallucinate.
+
+Never invent facts.
+
+If information is unavailable,
+
+reply
+
+"I couldn't find this information in the uploaded knowledge base."
+
+====================================================
+FEATURE 5
+====================================================
+
+Better Retrieval Logging
+
+Console logs
+
+Question Received
+
+Generating Embedding
+
+Running Vector Search
+
+Running BM25 Search
+
+Merging Results
+
+Removing Duplicates
+
+Re-ranking
+
+Selecting Top 5
+
+Sending Context to Gemini
+
+Generating Final Response
+
+Completed
+
+====================================================
+FEATURE 6
+====================================================
+
+Frontend Improvements
+
+Use existing HTML + Tailwind UI.
+
+Improve UX.
+
+Display
+
+Searching...
+
+Vector Search...
+
+BM25 Search...
+
+Re-ranking...
+
+Generating Answer...
+
+Display
+
+Retrieved Sources
+
+Display
+
+Confidence Indicator
+
+High
+
+Medium
+
+Low
+
+Auto Scroll
+
+Typing Animation
+
+Loading Spinner
+
+Responsive Layout
+
+====================================================
+FEATURE 7
+====================================================
+
+Performance
+
+Avoid duplicate embeddings.
+
+Cache embeddings in memory.
+
+Minimize unnecessary processing.
+
+Keep response latency low.
+
+====================================================
+FEATURE 8
+====================================================
+
+Security
+
+Validate every request.
+
+Sanitize input.
+
+Limit prompt size.
+
+Reject empty prompts.
+
+Prevent prompt injection into retrieved context.
+
+Never expose internal errors.
+
+====================================================
+FEATURE 9
+====================================================
+
+Architecture
+
+Create separate services
+
+HybridSearchService
+
+BM25Service
+
+VectorSearchService
+
+RerankService
+
+PromptBuilderService
+
+RetrievalPipelineService
+
+Keep everything SOLID.
+
+====================================================
+OUTPUT
+====================================================
+
+Extend the existing project.
+
+Generate every required file.
+
+Explain every new file.
+
+Explain every architectural decision.
+
+Provide
+
+npm install
+
+Run commands
+
+Testing steps
+
+Expected workflow
+
+Architecture diagram
+
+Keep the code production-ready, beginner-friendly and scalable for future videos including:
+
+- Ragas
+- Redis Memory
+- Metadata Filtering
+- Streaming
+- Authentication

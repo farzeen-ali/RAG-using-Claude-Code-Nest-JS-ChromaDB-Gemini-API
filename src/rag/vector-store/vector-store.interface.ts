@@ -21,6 +21,12 @@ export interface RetrievedChunk {
   distance: number;
 }
 
+export interface IndexedChunk {
+  id: string;
+  text: string;
+  metadata: ChunkMetadata;
+}
+
 /**
  * Abstraction over the vector database. Ingestion and retrieval code depend
  * only on this interface (injected via the VECTOR_STORE token), so adding
@@ -30,4 +36,11 @@ export interface RetrievedChunk {
 export interface IVectorStore {
   upsertChunks(records: VectorRecord[]): Promise<void>;
   querySimilar(embedding: number[], topK: number): Promise<RetrievedChunk[]>;
+  /**
+   * Returns every indexed chunk (text + metadata, no embeddings needed).
+   * Used by BM25Service to warm up its in-memory keyword index from
+   * whatever is already in the vector store, so a server restart doesn't
+   * lose keyword search until the next upload.
+   */
+  getAllChunks(): Promise<IndexedChunk[]>;
 }

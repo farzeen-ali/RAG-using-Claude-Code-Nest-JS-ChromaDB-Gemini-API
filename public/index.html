@@ -125,7 +125,13 @@
 <script>
 (function () {
   const UPLOAD_STAGES = ['Uploading…', 'Parsing PDF…', 'Cleaning…', 'Chunking…', 'Generating Embeddings…', 'Saving to ChromaDB…'];
-  const CHAT_STAGES = ['Searching Knowledge Base…', 'Building Context…', 'Thinking…', 'Generating Answer…'];
+  const CHAT_STAGES = ['Searching…', 'Vector Search…', 'BM25 Search…', 'Re-ranking…', 'Generating Answer…'];
+
+  const CONFIDENCE_STYLES = {
+    high: { label: 'High confidence', dot: 'bg-emerald-400', text: 'text-emerald-300', bg: 'bg-emerald-950/40 border-emerald-900' },
+    medium: { label: 'Medium confidence', dot: 'bg-amber-400', text: 'text-amber-300', bg: 'bg-amber-950/40 border-amber-900' },
+    low: { label: 'Low confidence', dot: 'bg-red-400', text: 'text-red-300', bg: 'bg-red-950/40 border-red-900' },
+  };
   const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
   // ---------- Elements ----------
@@ -298,7 +304,7 @@
     return div.innerHTML;
   }
 
-  function appendMessage(role, text, sources) {
+  function appendMessage(role, text, sources, confidence) {
     if (emptyStateEl) emptyStateEl.remove();
 
     const column = document.createElement('div');
@@ -311,7 +317,20 @@
     bubble.textContent = text;
     column.appendChild(bubble);
 
+    if (confidence && CONFIDENCE_STYLES[confidence]) {
+      const style = CONFIDENCE_STYLES[confidence];
+      const badge = document.createElement('span');
+      badge.className = `inline-flex items-center gap-1.5 text-[11px] ${style.text} ${style.bg} border rounded-full px-2 py-0.5 ml-1`;
+      badge.innerHTML = `<span class="h-1.5 w-1.5 rounded-full ${style.dot}"></span>${style.label}`;
+      column.appendChild(badge);
+    }
+
     if (sources && sources.length > 0) {
+      const srcLabel = document.createElement('p');
+      srcLabel.className = 'text-[10px] uppercase tracking-wide text-slate-600 pl-1 mt-0.5';
+      srcLabel.textContent = 'Retrieved Sources';
+      column.appendChild(srcLabel);
+
       const srcRow = document.createElement('div');
       srcRow.className = 'flex flex-wrap gap-1.5 pl-1';
       sources.forEach((source) => {
@@ -411,7 +430,7 @@
         return;
       }
 
-      appendMessage('assistant', data.answer, data.sources || []);
+      appendMessage('assistant', data.answer, data.sources || [], data.confidence);
     } catch (err) {
       clearInterval(stageTimer);
       indicator.remove();
