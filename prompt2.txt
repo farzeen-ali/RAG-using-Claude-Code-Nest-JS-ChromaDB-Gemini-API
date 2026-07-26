@@ -205,7 +205,6 @@ Display
 Retrieved Sources
 
 Display
-
 Confidence Indicator
 
 High
