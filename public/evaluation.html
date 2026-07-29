@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AI Evaluation — Enterprise Knowledge Base</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #334155; border-radius: 9999px; }
+  ::-webkit-scrollbar-thumb:hover { background: #475569; }
+</style>
+</head>
+<body class="h-full bg-slate-950 text-slate-100 antialiased">
+  <div class="min-h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="shrink-0 border-b border-slate-800 bg-slate-900/60 backdrop-blur px-6 py-4 flex items-center justify-between sticky top-0 z-10">
+      <div class="flex items-center gap-3">
+        <div class="h-9 w-9 rounded-lg bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-950">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5 text-white">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-sm font-semibold tracking-wide text-slate-100">Enterprise Knowledge Base</h1>
+          <p class="text-xs text-slate-400">AI Evaluation · Ragas-inspired scoring</p>
+        </div>
+      </div>
+      <nav class="hidden sm:flex items-center gap-1 text-xs font-medium">
+        <a href="/" class="px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors">Chat &amp; Upload</a>
+        <a href="/evaluation.html" class="px-3 py-1.5 rounded-lg bg-indigo-600 text-white">AI Evaluation</a>
+      </nav>
+      <div class="flex items-center gap-2 text-xs text-slate-400">
+        <span id="status-dot" class="h-2 w-2 rounded-full bg-slate-600"></span>
+        <span id="status-label">Checking API…</span>
+      </div>
+    </header>
+
+    <!-- Main -->
+    <main class="flex-1 max-w-6xl w-full mx-auto px-6 py-8 flex flex-col gap-8">
+
+      <!-- Quick Test -->
+      <section class="rounded-2xl border border-slate-800 bg-slate-900/30 p-5 flex flex-col gap-4">
+        <div>
+          <h2 class="text-sm font-semibold text-slate-200">Quick Test</h2>
+          <p class="text-xs text-slate-500 mt-0.5">Run a single question against your live knowledge base and score the answer.</p>
+        </div>
+
+        <form id="quick-test-form" class="grid gap-3">
+          <div>
+            <label for="qt-question" class="text-xs font-medium text-slate-400 mb-1 block">Question</label>
+            <textarea id="qt-question" rows="2" placeholder="e.g. What is Artificial Intelligence?"
+              class="w-full resize-none rounded-lg bg-slate-800/70 border border-slate-700 focus:border-indigo-500 focus:outline-none text-sm px-3 py-2 text-slate-100 placeholder:text-slate-500"></textarea>
+          </div>
+          <div>
+            <label for="qt-expected" class="text-xs font-medium text-slate-400 mb-1 block">Expected Answer</label>
+            <textarea id="qt-expected" rows="2" placeholder="What the correct answer should say"
+              class="w-full resize-none rounded-lg bg-slate-800/70 border border-slate-700 focus:border-indigo-500 focus:outline-none text-sm px-3 py-2 text-slate-100 placeholder:text-slate-500"></textarea>
+          </div>
+          <div>
+            <label for="qt-reference" class="text-xs font-medium text-slate-400 mb-1 block">Reference Context <span class="text-slate-600 font-normal">(optional — improves Context Recall accuracy)</span></label>
+            <textarea id="qt-reference" rows="2" placeholder="A ground-truth passage the answer should be based on"
+              class="w-full resize-none rounded-lg bg-slate-800/70 border border-slate-700 focus:border-indigo-500 focus:outline-none text-sm px-3 py-2 text-slate-100 placeholder:text-slate-500"></textarea>
+          </div>
+          <div class="flex items-center gap-3">
+            <button id="qt-run-btn" type="submit"
+              class="rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-white text-sm font-medium px-4 py-2 transition-colors flex items-center gap-2">
+              <svg id="qt-spinner" class="hidden h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+              </svg>
+              <span id="qt-run-label">Run Evaluation</span>
+            </button>
+            <span id="qt-error" class="hidden text-xs text-red-300"></span>
+          </div>
+        </form>
+
+        <div id="qt-results" class="hidden flex flex-col gap-4 pt-4 border-t border-slate-800">
+          <div>
+            <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">AI Answer</h3>
+            <p id="qt-answer" class="text-sm text-slate-100 bg-slate-800/50 rounded-lg p-3 whitespace-pre-wrap"></p>
+          </div>
+          <div>
+            <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Retrieved Context</h3>
+            <div id="qt-context" class="flex flex-col gap-2"></div>
+          </div>
+          <div>
+            <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Scores</h3>
+            <div id="qt-metrics" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Dataset Evaluation -->
+      <section class="rounded-2xl border border-slate-800 bg-slate-900/30 p-5 flex flex-col gap-4">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 class="text-sm font-semibold text-slate-200">Dataset Evaluation</h2>
+            <p class="text-xs text-slate-500 mt-0.5">Test cases loaded from <code class="text-slate-400 bg-slate-800/60 px-1 py-0.5 rounded">evaluation-dataset.json</code> at the project root.</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button id="run-all-btn"
+              class="rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-white text-sm font-medium px-4 py-2 transition-colors flex items-center gap-2">
+              <svg id="run-all-spinner" class="hidden h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+              </svg>
+              <span id="run-all-label">Run All Evaluations</span>
+            </button>
+            <button id="download-report-btn" disabled
+              class="rounded-lg border border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed text-slate-300 text-sm font-medium px-4 py-2 hover:bg-slate-800 transition-colors">
+              Download Report
+            </button>
+          </div>
+        </div>
+
+        <div id="dataset-error" class="hidden text-xs text-red-300 bg-red-950/50 border border-red-900 rounded-lg px-3 py-2"></div>
+
+        <div class="overflow-x-auto rounded-lg border border-slate-800">
+          <table class="w-full text-xs text-left">
+            <thead class="bg-slate-800/60 text-slate-400">
+              <tr>
+                <th class="px-3 py-2 font-medium">#</th>
+                <th class="px-3 py-2 font-medium">Question</th>
+                <th class="px-3 py-2 font-medium">Expected Answer</th>
+              </tr>
+            </thead>
+            <tbody id="dataset-table-body" class="divide-y divide-slate-800">
+              <tr><td class="px-3 py-3 text-slate-600 italic" colspan="3">Loading dataset…</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div id="report-summary" class="hidden flex flex-col gap-3 pt-2">
+          <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wide">Evaluation Report — Averages</h3>
+          <div id="report-metrics" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3"></div>
+          <p id="report-meta" class="text-xs text-slate-500"></p>
+        </div>
+
+        <div id="results-table-wrap" class="hidden overflow-x-auto rounded-lg border border-slate-800">
+          <table class="w-full text-xs text-left">
+            <thead class="bg-slate-800/60 text-slate-400">
+              <tr>
+                <th class="px-3 py-2 font-medium">#</th>
+                <th class="px-3 py-2 font-medium">Question</th>
+                <th class="px-3 py-2 font-medium">Faithfulness</th>
+                <th class="px-3 py-2 font-medium">Relevancy</th>
+                <th class="px-3 py-2 font-medium">Precision</th>
+                <th class="px-3 py-2 font-medium">Recall</th>
+                <th class="px-3 py-2 font-medium">Overall</th>
+              </tr>
+            </thead>
+            <tbody id="results-table-body" class="divide-y divide-slate-800"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+<script>
+(function () {
+  // ---------- Health check ----------
+  const statusDot = document.getElementById('status-dot');
+  const statusLabel = document.getElementById('status-label');
+
+  fetch('/health').then((res) => {
+    if (!res.ok) throw new Error();
+    statusDot.className = 'h-2 w-2 rounded-full bg-emerald-500';
+    statusLabel.textContent = 'API online';
+  }).catch(() => {
+    statusDot.className = 'h-2 w-2 rounded-full bg-red-500';
+    statusLabel.textContent = 'API unreachable';
+  });
+
+  // ---------- Shared helpers ----------
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str ?? '';
+    return div.innerHTML;
+  }
+
+  function truncate(text, max) {
+    if (!text) return '';
+    return text.length > max ? `${text.slice(0, max)}…` : text;
+  }
+
+  const SCORE_TIERS = [
+    { min: 80, badge: 'bg-emerald-950/40 text-emerald-300 border-emerald-900', bar: 'bg-emerald-500', label: 'Green' },
+    { min: 50, badge: 'bg-amber-950/40 text-amber-300 border-amber-900', bar: 'bg-amber-500', label: 'Amber' },
+    { min: 0, badge: 'bg-red-950/40 text-red-300 border-red-900', bar: 'bg-red-500', label: 'Red' },
+  ];
+
+  function getScoreTier(score) {
+    return SCORE_TIERS.find((tier) => score >= tier.min) || SCORE_TIERS[SCORE_TIERS.length - 1];
+  }
+
+  function scoreBadge(score) {
+    const tier = getScoreTier(score);
+    return `<span class="inline-flex text-[11px] px-2 py-0.5 rounded-full border whitespace-nowrap ${tier.badge}">${score}% · ${tier.label}</span>`;
+  }
+
+  function buildMetricCard(label, score) {
+    const tier = getScoreTier(score);
+    return `
+      <div class="rounded-xl border border-slate-800 bg-slate-900/50 p-4 flex flex-col gap-2">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-xs font-medium text-slate-300">${label}</span>
+          <span class="text-[11px] px-2 py-0.5 rounded-full border whitespace-nowrap ${tier.badge}">${tier.label}</span>
+        </div>
+        <span class="text-2xl font-semibold text-slate-100">${score}%</span>
+        <div class="h-2 rounded-full bg-slate-800 overflow-hidden">
+          <div class="h-full ${tier.bar} transition-all duration-500" style="width:${score}%"></div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderMetricsGrid(metrics) {
+    return [
+      buildMetricCard('Faithfulness', metrics.faithfulness),
+      buildMetricCard('Answer Relevancy', metrics.answerRelevancy),
+      buildMetricCard('Context Precision', metrics.contextPrecision),
+      buildMetricCard('Context Recall', metrics.contextRecall),
+      buildMetricCard('Overall Quality', metrics.overallQuality),
+    ].join('');
+  }
+
+  function renderContextChunks(chunks) {
+    if (!chunks || chunks.length === 0) {
+      return '<p class="text-xs text-slate-600 italic">No context was retrieved.</p>';
+    }
+    return chunks.map((chunk, i) => `
+      <div class="rounded-lg border border-slate-800 bg-slate-800/40 p-3">
+        <div class="flex items-center justify-between mb-1.5 gap-2">
+          <span class="text-[11px] font-medium text-slate-400 truncate">Chunk ${i + 1} · ${escapeHtml(chunk.filename)}</span>
+          <span class="text-[11px] text-slate-500 shrink-0">score ${chunk.score.toFixed(2)}</span>
+        </div>
+        <p class="text-xs text-slate-300 whitespace-pre-wrap">${escapeHtml(chunk.text)}</p>
+      </div>
+    `).join('');
+  }
+
+  async function parseErrorMessage(res) {
+    const data = await res.json().catch(() => ({}));
+    const message = Array.isArray(data.message) ? data.message.join(', ') : data.message;
+    return message || `Request failed with status ${res.status}.`;
+  }
+
+  // ---------- Quick Test ----------
+  const quickTestForm = document.getElementById('quick-test-form');
+  const qtQuestion = document.getElementById('qt-question');
+  const qtExpected = document.getElementById('qt-expected');
+  const qtReference = document.getElementById('qt-reference');
+  const qtRunBtn = document.getElementById('qt-run-btn');
+  const qtSpinner = document.getElementById('qt-spinner');
+  const qtRunLabel = document.getElementById('qt-run-label');
+  const qtError = document.getElementById('qt-error');
+  const qtResults = document.getElementById('qt-results');
+  const qtAnswer = document.getElementById('qt-answer');
+  const qtContext = document.getElementById('qt-context');
+  const qtMetrics = document.getElementById('qt-metrics');
+
+  function setQtLoading(loading) {
+    qtRunBtn.disabled = loading;
+    qtSpinner.classList.toggle('hidden', !loading);
+    qtRunLabel.textContent = loading ? 'Running…' : 'Run Evaluation';
+  }
+
+  function hideQtError() {
+    qtError.classList.add('hidden');
+  }
+
+  function showQtError(message) {
+    qtError.textContent = message;
+    qtError.classList.remove('hidden');
+  }
+
+  quickTestForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+
+    const question = qtQuestion.value.trim();
+    const expectedAnswer = qtExpected.value.trim();
+    const referenceContext = qtReference.value.trim();
+
+    if (!question) {
+      showQtError('Question must not be empty.');
+      return;
+    }
+    if (!expectedAnswer) {
+      showQtError('Expected Answer must not be empty.');
+      return;
+    }
+    hideQtError();
+    setQtLoading(true);
+
+    try {
+      const res = await fetch('/evaluation/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question,
+          expectedAnswer,
+          ...(referenceContext ? { referenceContext } : {}),
+        }),
+      });
+
+      if (!res.ok) throw new Error(await parseErrorMessage(res));
+
+      const result = await res.json();
+      qtAnswer.textContent = result.aiAnswer;
+      qtContext.innerHTML = renderContextChunks(result.retrievedContext);
+      qtMetrics.innerHTML = renderMetricsGrid(result.metrics);
+      qtResults.classList.remove('hidden');
+    } catch (err) {
+      showQtError(err.message || 'Something went wrong while evaluating.');
+    } finally {
+      setQtLoading(false);
+    }
+  });
+
+  // ---------- Dataset Evaluation ----------
+  const datasetErrorEl = document.getElementById('dataset-error');
+  const datasetTableBody = document.getElementById('dataset-table-body');
+  const runAllBtn = document.getElementById('run-all-btn');
+  const runAllSpinner = document.getElementById('run-all-spinner');
+  const runAllLabel = document.getElementById('run-all-label');
+  const downloadReportBtn = document.getElementById('download-report-btn');
+  const reportSummary = document.getElementById('report-summary');
+  const reportMetrics = document.getElementById('report-metrics');
+  const reportMeta = document.getElementById('report-meta');
+  const resultsTableWrap = document.getElementById('results-table-wrap');
+  const resultsTableBody = document.getElementById('results-table-body');
+
+  let lastReportPayload = null;
+
+  function hideDatasetError() {
+    datasetErrorEl.classList.add('hidden');
+  }
+
+  function showDatasetError(message) {
+    datasetErrorEl.textContent = message;
+    datasetErrorEl.classList.remove('hidden');
+  }
+
+  async function loadDatasetPreview() {
+    try {
+      const res = await fetch('/evaluation/dataset');
+      if (!res.ok) throw new Error(await parseErrorMessage(res));
+
+      const testCases = await res.json();
+      hideDatasetError();
+      datasetTableBody.innerHTML = testCases.map((testCase, i) => `
+        <tr>
+          <td class="px-3 py-2 text-slate-500">${i + 1}</td>
+          <td class="px-3 py-2 text-slate-200">${escapeHtml(testCase.question)}</td>
+          <td class="px-3 py-2 text-slate-400">${escapeHtml(truncate(testCase.expectedAnswer, 120))}</td>
+        </tr>
+      `).join('');
+    } catch (err) {
+      datasetTableBody.innerHTML = '';
+      showDatasetError(err.message || 'Could not load the evaluation dataset.');
+    }
+  }
+  loadDatasetPreview();
+
+  function setRunAllLoading(loading) {
+    runAllBtn.disabled = loading;
+    runAllSpinner.classList.toggle('hidden', !loading);
+    runAllLabel.textContent = loading ? 'Running all test cases…' : 'Run All Evaluations';
+  }
+
+  function renderReport(data) {
+    reportMetrics.innerHTML = renderMetricsGrid(data.report.averages);
+    reportMeta.textContent =
+      `${data.report.totalTestCases} test case(s) · ${data.report.passRate}% pass rate · ` +
+      `generated ${new Date(data.report.generatedAt).toLocaleString()}`;
+    reportSummary.classList.remove('hidden');
+
+    resultsTableBody.innerHTML = data.results.map((result, i) => `
+      <tr>
+        <td class="px-3 py-2 text-slate-500">${i + 1}</td>
+        <td class="px-3 py-2 text-slate-200 max-w-xs">${escapeHtml(result.question)}</td>
+        <td class="px-3 py-2">${scoreBadge(result.metrics.faithfulness)}</td>
+        <td class="px-3 py-2">${scoreBadge(result.metrics.answerRelevancy)}</td>
+        <td class="px-3 py-2">${scoreBadge(result.metrics.contextPrecision)}</td>
+        <td class="px-3 py-2">${scoreBadge(result.metrics.contextRecall)}</td>
+        <td class="px-3 py-2">${scoreBadge(result.metrics.overallQuality)}</td>
+      </tr>
+    `).join('');
+    resultsTableWrap.classList.remove('hidden');
+  }
+
+  runAllBtn.addEventListener('click', async () => {
+    hideDatasetError();
+    setRunAllLoading(true);
+
+    try {
+      const res = await fetch('/evaluation/run-dataset', { method: 'POST' });
+      if (!res.ok) throw new Error(await parseErrorMessage(res));
+
+      const data = await res.json();
+      renderReport(data);
+      lastReportPayload = data;
+      downloadReportBtn.disabled = false;
+    } catch (err) {
+      showDatasetError(err.message || 'Something went wrong while running the dataset.');
+    } finally {
+      setRunAllLoading(false);
+    }
+  });
+
+  downloadReportBtn.addEventListener('click', () => {
+    if (!lastReportPayload) return;
+    const blob = new Blob([JSON.stringify(lastReportPayload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `evaluation-report-${Date.now()}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  });
+})();
+</script>
+</body>
+</html>

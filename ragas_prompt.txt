@@ -1,0 +1,135 @@
+You are a Principal AI Engineer, Senior NestJS Architect and LLM Evaluation Expert.
+
+I already have a production-ready RAG application built with:
+
+- NestJS
+- Gemini 2.5 Flash
+- ChromaDB
+- Hybrid Search
+- BM25
+- Vector Search
+- Re-ranking
+- HTML + Tailwind UI
+
+DO NOT rebuild the project.
+
+ONLY extend it.
+
+====================================================
+
+GOAL
+
+====================================================
+
+Add an AI Evaluation module using Ragas-inspired evaluation concepts.
+
+Keep the project beginner-friendly while following production architecture.
+
+====================================================
+
+FEATURES
+
+====================================================
+
+Create an Evaluation Module.
+
+Provide a page where I can:
+
+- Enter a test question
+- Enter the expected answer
+- Run evaluation
+- Display AI answer
+- Display retrieved context
+- Calculate and display:
+
+• Faithfulness Score
+• Answer Relevancy Score
+• Context Precision
+• Context Recall
+• Overall Quality Score
+
+Use percentage progress bars and colour badges (Green/Amber/Red).
+
+====================================================
+
+DATASET
+
+====================================================
+
+Allow adding multiple evaluation test cases in a JSON file.
+
+Example:
+
+Question
+
+Expected Answer
+
+Reference Context
+
+Run all evaluations with one click.
+
+Generate an evaluation report.
+
+====================================================
+
+UI
+
+====================================================
+
+Improve the existing HTML + Tailwind interface.
+
+Create an "AI Evaluation" page.
+
+Use cards, tables and progress bars.
+
+Responsive and professional.
+
+====================================================
+
+SECURITY
+
+====================================================
+
+Validate inputs.
+
+Handle missing expected answers.
+
+Handle empty questions.
+
+Never expose stack traces.
+
+====================================================
+
+ARCHITECTURE
+
+====================================================
+
+Create separate services:
+
+EvaluationService
+
+MetricsService
+
+ReportService
+
+DatasetService
+
+Keep the code modular and production-ready.
+
+====================================================
+
+OUTPUT
+
+====================================================
+
+Extend the existing project only.
+
+Explain every new file.
+
+Provide npm install commands.
+
+Explain how to run the project.
+
+Explain how to evaluate multiple test cases.
+
+Generate the complete implementation in one response.

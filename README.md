@@ -146,6 +146,17 @@ src/
 │       ├── chroma-vector-store.service.ts  Chroma implementation
 │       └── noop-embedding-function.ts   Satisfies Chroma's API without a second embedding provider
 │
+├── evaluation/                     NEW — Ragas-inspired quality evaluation (see section 9)
+│   ├── evaluation.module.ts        Imports RagModule; registers the 4 services below + the controller
+│   ├── evaluation.controller.ts    POST /evaluation/run, GET /evaluation/dataset, POST /evaluation/run-dataset
+│   ├── evaluation.service.ts       Runs one (or many) test case(s) through RetrievalPipelineService.runWithContext()
+│   ├── metrics.service.ts          Faithfulness / Answer Relevancy / Context Precision / Context Recall / Overall Quality
+│   ├── report.service.ts           Aggregates a batch of results into averages + pass rate
+│   ├── dataset.service.ts          Loads & validates evaluation-dataset.json from the project root
+│   └── dto/
+│       ├── run-evaluation.dto.ts        Validated { question, expectedAnswer, referenceContext? }
+│       ├── metric-scores.dto.ts, evaluation-result.dto.ts, evaluation-report.dto.ts, run-dataset-response.dto.ts
+│
 ├── knowledge/                      POST /knowledge/upload (unchanged contract)
 │   ├── knowledge.module.ts
 │   ├── knowledge.controller.ts     Multer + ParseFilePipeBuilder (PDF-only, 10MB)
@@ -157,7 +168,10 @@ src/
     └── dto/chat-request.dto.ts, chat-response.dto.ts   response now also carries `confidence`
 
 public/
-└── index.html                      Tailwind (CDN) + vanilla JS — upload panel + chat panel + confidence badge
+├── index.html                      Tailwind (CDN) + vanilla JS — upload panel + chat panel + confidence badge
+└── evaluation.html                 NEW — AI Evaluation page: quick test form + dataset table + report
+
+evaluation-dataset.json             NEW — project-root JSON array of { question, expectedAnswer, referenceContext? }
 ```
 
 **Note on the 10 MB limit**: it's a plain constant (`common/constants/upload.constants.ts`), not an env var. Nest evaluates `FileInterceptor`'s options when the class is defined (at import time), before `ConfigModule` has parsed `.env` — so a "configurable" env var there would silently not apply. This keeps the one hard requirement from the spec actually enforced everywhere it's checked.
@@ -200,7 +214,7 @@ Nothing about the existing HTTP contracts broke:
 
 - **Vector store swap (Pinecone, metadata filtering)** — implement `IVectorStore` and change one line in `rag.module.ts` (`{ provide: VECTOR_STORE, useClass: ... }`).
 - **Hosted reranker (Cohere)** — implement `IRerankProvider` (or finish `CohereRerankProvider`) and change one line (`{ provide: RERANK_PROVIDER, useClass: ... }`). See the integration guide in `rerank/cohere-rerank.provider.ts`.
-- **Ragas evaluation** — `RagService.answerQuestion()` already returns `{ answer, sources, confidence }`; an eval script can call the same endpoint or service directly, and `confidence` gives it a cheap baseline signal to correlate against.
+- **Ragas evaluation** — done in this pass, see section 9. A future upgrade could swap `MetricsService`'s hand-rolled scoring for the real Python `ragas` library (e.g. via a small sidecar service) behind the same `MetricScoresDto` shape, without touching `EvaluationService`/`DatasetService`/`ReportService`.
 - **Redis conversation memory** — `RetrievalPipelineService.run(question)` takes a single question today; adding an optional `conversationId`/history parameter is additive, not a rewrite.
 - **Streaming responses** — isolated to `GeminiService.generateAnswer()`; swap in `generateContentStream` and expose SSE from `ChatController` without touching retrieval code.
 - **Auth, rate limiting, caching, observability** — these are typically Nest guards/interceptors/middleware layered around existing controllers, not internal RAG logic changes.
@@ -393,3 +407,127 @@ Hybrid search is easiest to feel with a query that's mostly an exact term/code/n
 ## 8. Notes on the frontend progress stages
 
 The staged messages ("Uploading…", "Searching…", "Vector Search…", etc.) are driven client-side while a single HTTP request is in flight — the current API returns one response per request, not incremental progress events. Real step-by-step server progress would need Server-Sent Events or WebSockets, which is intentionally left for a future "Streaming Responses" lesson.
+
+---
+
+## 9. AI Evaluation Module (Ragas-inspired)
+
+A new `/evaluation` API + an "AI Evaluation" page, built entirely on top of the existing pipeline — **no new npm packages, no Python, no external eval service**. Nothing about `/knowledge/upload` or `/chat` changed.
+
+### 9.1 What it does
+
+- **Quick Test**: enter a question + expected answer (+ optional reference context) and run one evaluation. Shows the AI's actual answer, the retrieved context chunks (with their rerank score), and five scores as percentage progress bars with Green/Amber/Red badges.
+- **Dataset Evaluation**: loads test cases from `evaluation-dataset.json` (project root), runs all of them with one click, and shows a results table plus an aggregate report (average score per metric, pass rate). The report can be downloaded as JSON.
+
+### 9.2 The five scores, and how each is actually computed
+
+No Ragas/Python dependency was added — `MetricsService` computes Ragas-*inspired* versions of the same four metrics using tools already in the app (Gemini generation + Gemini embeddings), plus an overall average:
+
+| Metric | How it's computed |
+|---|---|
+| **Faithfulness** | LLM-judged. Gemini is asked, given the retrieved context and the AI's answer, what percentage of the answer's claims are actually supported by the context (0-100). This is the one metric that genuinely needs judgment, not just similarity. |
+| **Answer Relevancy** | Embedding-based. Cosine similarity between the question's and the AI answer's embeddings (Gemini `SEMANTIC_SIMILARITY` task type — a new `EmbeddingService.embedForSimilarity()` method, separate from the `RETRIEVAL_QUERY`/`RETRIEVAL_DOCUMENT` types used for search). |
+| **Context Precision** | Embedding-based, rank-weighted. Each retrieved chunk is compared to the question; a chunk counts as "relevant" above a similarity threshold. Relevant chunks ranked higher contribute more to the score — the same idea as Ragas' context precision (good retrieval ranks the right chunks first). |
+| **Context Recall** | Embedding-based. The reference text (`referenceContext` if you provided one, otherwise `expectedAnswer`) is split into sentences; each sentence is checked against all retrieved chunks, and the score is the fraction that are covered by at least one chunk above the similarity threshold. |
+| **Overall Quality** | Plain average of the four above. |
+
+All of this reuses `EmbeddingService`'s existing in-memory cache from the Hybrid Search upgrade, so re-running the same dataset (or the same chunk appearing in both precision and recall calculations) doesn't re-call Gemini for identical text.
+
+### 9.3 New files
+
+```
+src/evaluation/
+├── evaluation.module.ts        Imports RagModule (for EmbeddingService, GeminiService, RetrievalPipelineService)
+├── evaluation.controller.ts    POST /evaluation/run, GET /evaluation/dataset, POST /evaluation/run-dataset
+├── evaluation.service.ts       Runs a test case via RetrievalPipelineService.runWithContext(), then scores it
+├── metrics.service.ts          The five scores (see table above)
+├── report.service.ts           Averages + pass rate across a batch of results
+├── dataset.service.ts          Reads + validates evaluation-dataset.json, clear 400s on bad data
+└── dto/
+    ├── run-evaluation.dto.ts        Validated { question, expectedAnswer, referenceContext? }
+    ├── metric-scores.dto.ts         { faithfulness, answerRelevancy, contextPrecision, contextRecall, overallQuality }
+    ├── evaluation-result.dto.ts     One test case's full result (question, aiAnswer, retrievedContext, metrics, ...)
+    ├── evaluation-report.dto.ts     Aggregate report shape
+    └── run-dataset-response.dto.ts  { results[], report }
+
+src/common/utils/similarity.util.ts   cosineSimilarity(a, b) — pure vector math, no dependencies
+
+evaluation-dataset.json          Seed dataset with 3 example test cases (see 9.5)
+public/evaluation.html           The AI Evaluation page
+```
+
+**Small additive changes to existing files** (nothing removed, no behavior change to `/chat` or `/knowledge/upload`):
+- `EmbeddingService` gained `embedForSimilarity(text)` (uses Gemini's `SEMANTIC_SIMILARITY` task type — the correct one for pairwise comparison, distinct from search).
+- `RetrievalPipelineService.run()` (used by `/chat`) was refactored to call a new private `execute()`; a new public `runWithContext()` calls the same `execute()` but also returns the retrieved context chunks. `/chat`'s response is byte-for-byte unchanged — only the new Evaluation module calls `runWithContext()`.
+- `rag.module.ts` now also exports `EmbeddingService`, `GeminiService`, and `RetrievalPipelineService` (previously only `RagService` was exported) so `EvaluationModule` can reuse them.
+- `configuration.ts` / `env.validation.ts` / `.env.example` gained `EVALUATION_DATASET_PATH` (default `evaluation-dataset.json`).
+- `index.html` header gained a nav link to `/evaluation.html`.
+
+### 9.4 Security
+
+- `RunEvaluationDto` validates `question` (`@IsNotEmpty`, max 2000 chars) and `expectedAnswer` (`@IsNotEmpty`, max 4000 chars) — an empty question or a missing expected answer is rejected with a `400` before anything runs.
+- `DatasetService` validates every test case in the JSON file individually (object shape, non-empty `question`/`expectedAnswer`, `referenceContext` must be a string if present) and throws a precise, indexed `400` (`Test case at index 2 is missing a non-empty "expectedAnswer"`) rather than an opaque parse failure.
+- A missing dataset file, or one that isn't valid JSON, returns a clear `404`/`400` — never a stack trace.
+- Every route in this module goes through the same global `AllExceptionsFilter` as the rest of the app, so unexpected errors (e.g. Gemini being unreachable) still come back as a generic `500` with no internal details, exactly like `/chat` and `/knowledge/upload` already do.
+
+### 9.5 How to add and run your own test cases
+
+Open `evaluation-dataset.json` at the project root — it's a plain JSON array:
+
+```json
+[
+  {
+    "question": "What is Artificial Intelligence?",
+    "expectedAnswer": "Artificial Intelligence (AI) is the field of computer science focused on building systems that can perform tasks that normally require human intelligence...",
+    "referenceContext": "Artificial Intelligence (AI) is a branch of computer science dedicated to creating systems capable of performing tasks that typically require human intelligence..."
+  },
+  {
+    "question": "What are the main types of machine learning?",
+    "expectedAnswer": "The main types of machine learning are supervised learning, unsupervised learning, and reinforcement learning."
+  }
+]
+```
+
+- `question` and `expectedAnswer` are required for every entry.
+- `referenceContext` is optional — if you have the actual ground-truth passage the answer should come from, add it for a more accurate Context Recall score; otherwise `expectedAnswer` itself is used as the reference.
+- **The shipped file has placeholder examples about AI/ML topics** — replace them with questions and answers that match whatever documents you've actually uploaded via `/knowledge/upload`, since evaluation always queries your live knowledge base, not a fixed corpus.
+
+To run them:
+1. Open **http://localhost:3000/evaluation.html**.
+2. The "Dataset Evaluation" table loads automatically from `GET /evaluation/dataset`.
+3. Click **Run All Evaluations** — this calls `POST /evaluation/run-dataset`, which runs every test case sequentially (deliberately not in parallel, to avoid hammering Gemini's rate limits) and returns a full report.
+4. Review the per-metric averages and pass rate, and the per-test-case table below it.
+5. Click **Download Report** to save the full JSON (`results` + `report`) locally.
+
+Or via curl:
+```bash
+curl -X POST http://localhost:3000/evaluation/run-dataset
+```
+
+To test a single question without touching the dataset file, use the **Quick Test** card on the same page, or:
+```bash
+curl -X POST http://localhost:3000/evaluation/run \
+  -H "Content-Type: application/json" \
+  -d '{"question":"What is Artificial Intelligence?","expectedAnswer":"AI is a field of computer science focused on building intelligent systems."}'
+```
+
+Expected response shape:
+```json
+{
+  "question": "What is Artificial Intelligence?",
+  "expectedAnswer": "AI is a field of computer science focused on building intelligent systems.",
+  "aiAnswer": "…the actual answer generated by the RAG pipeline…",
+  "retrievedContext": [
+    { "text": "…chunk text…", "filename": "your-document.pdf", "score": 0.82 }
+  ],
+  "sources": ["your-document.pdf"],
+  "metrics": {
+    "faithfulness": 92,
+    "answerRelevancy": 88,
+    "contextPrecision": 75,
+    "contextRecall": 80,
+    "overallQuality": 84
+  },
+  "evaluatedAt": "2026-07-29T18:12:00.000Z"
+}
+```

@@ -19,3 +19,14 @@ export interface ScoredChunk {
   /** Set by the active IRerankProvider; absent until reranking has run. */
   rerankScore?: number;
 }
+
+/**
+ * A chunk that made it into the final prompt, in the shape the Evaluation
+ * module needs to display "retrieved context" and score it against a
+ * reference answer/context.
+ */
+export interface RetrievedContextChunk {
+  text: string;
+  filename: string;
+  score: number;
+}

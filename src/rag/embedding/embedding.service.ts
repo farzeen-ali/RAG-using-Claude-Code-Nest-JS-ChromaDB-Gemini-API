@@ -10,7 +10,8 @@ import type { EmbedContentResponse } from '@google/genai';
 import { AppConfig } from '../../config/configuration';
 import { GEMINI_CLIENT } from '../llm/gemini-client.provider';
 
-type EmbeddingTaskType = 'RETRIEVAL_DOCUMENT' | 'RETRIEVAL_QUERY';
+type EmbeddingTaskType =
+  'RETRIEVAL_DOCUMENT' | 'RETRIEVAL_QUERY' | 'SEMANTIC_SIMILARITY';
 
 // Keeps individual Gemini requests small and rate-limit friendly rather than
 // sending every chunk of a large PDF in one call.
@@ -55,6 +56,19 @@ export class EmbeddingService {
 
   async embedQuery(question: string): Promise<number[]> {
     const [embedding] = await this.embedBatched([question], 'RETRIEVAL_QUERY');
+    return embedding;
+  }
+
+  /**
+   * Embeds arbitrary text for pairwise similarity comparison (used by
+   * MetricsService to score answer relevancy / context precision / context
+   * recall via cosine similarity). RETRIEVAL_QUERY and RETRIEVAL_DOCUMENT are
+   * optimized for asymmetric search matching; SEMANTIC_SIMILARITY is
+   * Gemini's task type for "how similar are these two texts to each other",
+   * which is the actual question being asked in evaluation.
+   */
+  async embedForSimilarity(text: string): Promise<number[]> {
+    const [embedding] = await this.embedBatched([text], 'SEMANTIC_SIMILARITY');
     return embedding;
   }
 

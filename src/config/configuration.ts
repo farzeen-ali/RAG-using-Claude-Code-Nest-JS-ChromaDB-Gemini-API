@@ -21,6 +21,9 @@ export interface AppConfig {
     topK: number;
     candidateK: number;
   };
+  evaluation: {
+    datasetPath: string;
+  };
 }
 
 export default (): AppConfig => ({
@@ -49,5 +52,9 @@ export default (): AppConfig => ({
   retrieval: {
     topK: parseInt(process.env.RETRIEVAL_TOP_K ?? '5', 10),
     candidateK: parseInt(process.env.RETRIEVAL_CANDIDATE_K ?? '10', 10),
+  },
+  evaluation: {
+    datasetPath:
+      process.env.EVALUATION_DATASET_PATH ?? 'evaluation-dataset.json',
   },
 });

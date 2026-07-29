@@ -54,6 +54,15 @@ import { VECTOR_STORE } from './vector-store/vector-store.interface';
     CohereRerankProvider,
     { provide: RERANK_PROVIDER, useClass: RerankService },
   ],
-  exports: [RagService],
+  // EmbeddingService, GeminiService, and RetrievalPipelineService are
+  // exported (in addition to RagService) so EvaluationModule can reuse the
+  // exact same embedding model and retrieval pipeline the chat endpoint
+  // uses, instead of duplicating that logic.
+  exports: [
+    RagService,
+    EmbeddingService,
+    GeminiService,
+    RetrievalPipelineService,
+  ],
 })
 export class RagModule {}

@@ -68,6 +68,10 @@ class EnvironmentVariables {
   @IsInt()
   @Min(1)
   RETRIEVAL_CANDIDATE_K?: number;
+
+  @IsOptional()
+  @IsString()
+  EVALUATION_DATASET_PATH?: string;
 }
 
 // Fails fast on boot with a readable error instead of surfacing missing-config

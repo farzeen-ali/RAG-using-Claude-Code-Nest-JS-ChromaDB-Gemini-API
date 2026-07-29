@@ -11,12 +11,20 @@ import {
 import { RERANK_PROVIDER } from '../rerank/rerank-provider.interface';
 import type { IRerankProvider } from '../rerank/rerank-provider.interface';
 import { HybridSearchService } from './hybrid-search.service';
-import type { ConfidenceLevel, ScoredChunk } from './retrieval.types';
+import type {
+  ConfidenceLevel,
+  RetrievedContextChunk,
+  ScoredChunk,
+} from './retrieval.types';
 
 export interface PipelineResult {
   answer: string;
   sources: string[];
   confidence: ConfidenceLevel;
+}
+
+export interface PipelineResultWithContext extends PipelineResult {
+  retrievedContext: RetrievedContextChunk[];
 }
 
 // Rerank scores are a weighted 0..1 blend (see RerankService) — these
@@ -52,7 +60,27 @@ export class RetrievalPipelineService {
     this.finalTopK = this.configService.get('retrieval.topK', { infer: true });
   }
 
+  /** Used by ChatController via RagService — the existing, unchanged /chat contract. */
   async run(rawQuestion: string): Promise<PipelineResult> {
+    const { answer, sources, confidence } = await this.execute(rawQuestion);
+    return { answer, sources, confidence };
+  }
+
+  /**
+   * Same pipeline as run(), but also returns the retrieved context chunks
+   * that were actually sent to Gemini. Used by the Evaluation module, which
+   * needs to display and score the context — /chat intentionally never
+   * exposes this, to keep its response shape exactly as it was before.
+   */
+  async runWithContext(
+    rawQuestion: string,
+  ): Promise<PipelineResultWithContext> {
+    return this.execute(rawQuestion);
+  }
+
+  private async execute(
+    rawQuestion: string,
+  ): Promise<PipelineResultWithContext> {
     const question = sanitizeQuestion(rawQuestion);
     this.logger.log(`Question received: "${question}"`);
 
@@ -69,7 +97,12 @@ export class RetrievalPipelineService {
       this.logger.log(
         'No candidates found from vector or BM25 search. Completed.',
       );
-      return { answer: NO_ANSWER_MESSAGE, sources: [], confidence: 'low' };
+      return {
+        answer: NO_ANSWER_MESSAGE,
+        sources: [],
+        confidence: 'low',
+        retrievedContext: [],
+      };
     }
 
     this.logger.log('Re-ranking...');
@@ -96,9 +129,14 @@ export class RetrievalPipelineService {
       ...new Set(reranked.map((chunk) => chunk.metadata.filename)),
     ];
     const confidence = this.computeConfidence(reranked);
+    const retrievedContext: RetrievedContextChunk[] = reranked.map((chunk) => ({
+      text: chunk.text,
+      filename: chunk.metadata.filename,
+      score: chunk.rerankScore ?? 0,
+    }));
 
     this.logger.log('Completed.');
-    return { answer, sources, confidence };
+    return { answer, sources, confidence, retrievedContext };
   }
 
   private computeConfidence(chunks: ScoredChunk[]): ConfidenceLevel {

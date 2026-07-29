@@ -7,6 +7,7 @@ import { ChatModule } from './chat/chat.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import configuration from './config/configuration';
 import { validate } from './config/env.validation';
+import { EvaluationModule } from './evaluation/evaluation.module';
 import { KnowledgeModule } from './knowledge/knowledge.module';
 import { RagModule } from './rag/rag.module';
 
@@ -20,6 +21,7 @@ import { RagModule } from './rag/rag.module';
     RagModule,
     KnowledgeModule,
     ChatModule,
+    EvaluationModule,
   ],
   controllers: [AppController],
   providers: [

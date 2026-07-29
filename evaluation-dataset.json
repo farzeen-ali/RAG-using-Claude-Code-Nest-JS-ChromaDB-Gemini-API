@@ -1,0 +1,59 @@
+[
+  {
+    "question": "What is Artificial Intelligence?",
+    "expectedAnswer": "Artificial Intelligence (AI) enables machines to perform tasks that normally require human intelligence.",
+    "referenceContext": "Artificial Intelligence (AI) enables machines to perform tasks that normally require human intelligence."
+  },
+  {
+    "question": "What is Machine Learning?",
+    "expectedAnswer": "Machine Learning is a subset of AI."
+  },
+  {
+    "question": "What is Deep Learning?",
+    "expectedAnswer": "Deep Learning is a subset of Machine Learning."
+  },
+  {
+    "question": "What can Generative AI create?",
+    "expectedAnswer": "Generative AI can create text, images, code, audio and video."
+  },
+  {
+    "question": "What are some examples of Large Language Models (LLMs)?",
+    "expectedAnswer": "Large Language Models (LLMs) include Gemini, GPT, and Claude."
+  },
+  {
+    "question": "What is Retrieval-Augmented Generation (RAG)?",
+    "expectedAnswer": "Retrieval-Augmented Generation (RAG) combines retrieval with generation."
+  },
+  {
+    "question": "What are embeddings?",
+    "expectedAnswer": "Embeddings convert text into vectors."
+  },
+  {
+    "question": "What do vector databases do?",
+    "expectedAnswer": "Vector Databases store embeddings."
+  },
+  {
+    "question": "What is ChromaDB?",
+    "expectedAnswer": "ChromaDB is an open-source vector database."
+  },
+  {
+    "question": "What is Pinecone?",
+    "expectedAnswer": "Pinecone is a managed cloud vector database."
+  },
+  {
+    "question": "What is Semantic Search?",
+    "expectedAnswer": "Semantic Search finds information based on meaning instead of exact keywords."
+  },
+  {
+    "question": "What is Chunking?",
+    "expectedAnswer": "Chunking breaks large documents into smaller meaningful pieces."
+  },
+  {
+    "question": "What does Metadata help with?",
+    "expectedAnswer": "Metadata helps filter documents."
+  },
+  {
+    "question": "What is the capital of France?",
+    "expectedAnswer": "I couldn't find this information in the uploaded knowledge base."
+  }
+]
