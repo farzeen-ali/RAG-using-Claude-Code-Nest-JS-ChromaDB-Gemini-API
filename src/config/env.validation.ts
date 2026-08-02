@@ -72,6 +72,23 @@ class EnvironmentVariables {
   @IsOptional()
   @IsString()
   EVALUATION_DATASET_PATH?: string;
+
+  @IsOptional()
+  @IsString()
+  REDIS_HOST?: string;
+
+  @IsOptional()
+  @IsInt()
+  REDIS_PORT?: number;
+
+  @IsOptional()
+  @IsString()
+  REDIS_PASSWORD?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(60, { message: 'REDIS_TTL_SECONDS should be at least 60 (1 minute)' })
+  REDIS_TTL_SECONDS?: number;
 }
 
 // Fails fast on boot with a readable error instead of surfacing missing-config

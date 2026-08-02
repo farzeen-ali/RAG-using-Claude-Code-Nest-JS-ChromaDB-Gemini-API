@@ -8,8 +8,6 @@ import { randomUUID } from 'crypto';
 import { cleanExtractedText } from '../common/utils/text-cleaner.util';
 import { convertToMarkdown } from '../common/utils/markdown-converter.util';
 import { BM25Service } from './retrieval/bm25.service';
-import { RetrievalPipelineService } from './retrieval/retrieval-pipeline.service';
-import type { ConfidenceLevel } from './retrieval/retrieval.types';
 import { ChunkingService } from './chunking/chunking.service';
 import { EmbeddingService } from './embedding/embedding.service';
 import { PdfService } from './pdf/pdf.service';
@@ -27,18 +25,12 @@ export interface IngestResult {
   message: string;
 }
 
-export interface AnswerResult {
-  answer: string;
-  sources: string[];
-  confidence: ConfidenceLevel;
-}
-
 /**
- * Public facade for the two RAG workflows. Controllers only ever talk to
- * this service. Ingestion logic (PDF -> clean -> chunk -> embed -> index)
- * lives here; question-answering is delegated entirely to
- * RetrievalPipelineService, which owns the hybrid search + rerank +
- * generation pipeline and its own staged logging.
+ * Public facade for document ingestion (PDF -> clean -> chunk -> embed ->
+ * index into Chroma + BM25). Question-answering used to live here too, but
+ * now that /chat is memory-aware, ConversationService (src/memory/) owns
+ * that flow directly against RetrievalPipelineService — RagService stays
+ * focused on ingestion only.
  */
 @Injectable()
 export class RagService {
@@ -49,7 +41,6 @@ export class RagService {
     private readonly chunkingService: ChunkingService,
     private readonly embeddingService: EmbeddingService,
     private readonly bm25Service: BM25Service,
-    private readonly retrievalPipeline: RetrievalPipelineService,
     @Inject(VECTOR_STORE) private readonly vectorStore: IVectorStore,
   ) {}
 
@@ -107,9 +98,5 @@ export class RagService {
       chunksIndexed: records.length,
       message: 'Knowledge Base Ready',
     };
-  }
-
-  async answerQuestion(question: string): Promise<AnswerResult> {
-    return this.retrievalPipeline.run(question);
   }
 }

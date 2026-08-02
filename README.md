@@ -2,9 +2,9 @@
 
 A production-shaped Retrieval-Augmented Generation (RAG) application built with **NestJS**, **Gemini 2.5 Flash**, and **ChromaDB**. Upload PDF documents, index them into a vector store, and ask grounded questions answered strictly from your own knowledge base — no hallucinated answers.
 
-Retrieval is **hybrid**: semantic vector search and BM25 keyword search run together and are merged, then a re-ranking layer picks the best 5 chunks before they ever reach Gemini.
+Retrieval is **hybrid**: semantic vector search and BM25 keyword search run together and are merged, then a re-ranking layer picks the best 5 chunks before they ever reach Gemini. Chat has **short-term memory**: each session's conversation is remembered in Redis for 30 minutes of inactivity, so follow-up questions ("what about its dataset size?") resolve correctly.
 
-This is the foundation for an AI Engineering course. It is intentionally structured so later lessons (Ragas evaluation, Redis conversation memory, a hosted reranker, streaming, auth, rate limiting, observability) can be bolted on without rewriting existing code.
+This is the foundation for an AI Engineering course. It is intentionally structured so later lessons (a hosted reranker, long-term memory, streaming, auth, rate limiting, observability) can be bolted on without rewriting existing code.
 
 ---
 
@@ -16,12 +16,13 @@ This is the foundation for an AI Engineering course. It is intentionally structu
 | LLM + Embeddings | Gemini 2.5 Flash / `gemini-embedding-001` via `@google/genai` |
 | Vector database | ChromaDB |
 | Keyword search | In-process BM25 (no extra service) |
+| Short-term chat memory | Redis via `ioredis` |
 | File upload | Multer (via `@nestjs/platform-express`) |
 | PDF parsing | `pdf-parse` |
 | Validation | `class-validator` / `class-transformer` |
 | Frontend | Plain HTML + Tailwind CSS (CDN) + vanilla JS — no framework, no build step |
 
-No Docker, Redis, BullMQ, React, or Next.js is used anywhere in this project, by design.
+No Docker, BullMQ, React, or Next.js is used anywhere in this project, by design. Redis is the one infrastructure dependency beyond Chroma, used purely as a short-lived key-value store — no Docker changes needed if you already have Redis running.
 
 ---
 
@@ -157,15 +158,25 @@ src/
 │       ├── run-evaluation.dto.ts        Validated { question, expectedAnswer, referenceContext? }
 │       ├── metric-scores.dto.ts, evaluation-result.dto.ts, evaluation-report.dto.ts, run-dataset-response.dto.ts
 │
+├── redis/                          NEW — the Redis connection, isolated behind RedisService
+│   ├── redis.module.ts             Registers the client provider + RedisService, exports RedisService
+│   ├── redis-client.provider.ts    ioredis client factory (DI token REDIS_CLIENT); fast-fail config
+│   └── redis.service.ts            get/set-with-expiry/del, each swallowing + logging Redis errors
+│
+├── memory/                         NEW — short-term chat memory (see section 10)
+│   ├── memory.module.ts            Imports RedisModule + RagModule; exports ConversationService
+│   ├── memory.service.ts           Redis key naming, (de)serialization, sliding 30-min TTL
+│   └── conversation.service.ts     Orchestrates load → append user → generate → append assistant → save
+│
 ├── knowledge/                      POST /knowledge/upload (unchanged contract)
 │   ├── knowledge.module.ts
 │   ├── knowledge.controller.ts     Multer + ParseFilePipeBuilder (PDF-only, 10MB)
 │   └── dto/upload-response.dto.ts
 │
-└── chat/                           POST /chat
-    ├── chat.module.ts
-    ├── chat.controller.ts
-    └── dto/chat-request.dto.ts, chat-response.dto.ts   response now also carries `confidence`
+└── chat/                           POST /chat, DELETE /chat/:sessionId
+    ├── chat.module.ts              Imports MemoryModule
+    ├── chat.controller.ts          sendMessage() + clearMemory(); no longer talks to RagService directly
+    └── dto/send-message.dto.ts, chat-response.dto.ts   { sessionId, prompt } in, { sessionId, answer, sources, confidence } out
 
 public/
 ├── index.html                      Tailwind (CDN) + vanilla JS — upload panel + chat panel + confidence badge
@@ -215,7 +226,7 @@ Nothing about the existing HTTP contracts broke:
 - **Vector store swap (Pinecone, metadata filtering)** — implement `IVectorStore` and change one line in `rag.module.ts` (`{ provide: VECTOR_STORE, useClass: ... }`).
 - **Hosted reranker (Cohere)** — implement `IRerankProvider` (or finish `CohereRerankProvider`) and change one line (`{ provide: RERANK_PROVIDER, useClass: ... }`). See the integration guide in `rerank/cohere-rerank.provider.ts`.
 - **Ragas evaluation** — done in this pass, see section 9. A future upgrade could swap `MetricsService`'s hand-rolled scoring for the real Python `ragas` library (e.g. via a small sidecar service) behind the same `MetricScoresDto` shape, without touching `EvaluationService`/`DatasetService`/`ReportService`.
-- **Redis conversation memory** — `RetrievalPipelineService.run(question)` takes a single question today; adding an optional `conversationId`/history parameter is additive, not a rewrite.
+- **Redis conversation memory** — done in this pass, see section 10. A future upgrade could add long-term memory (e.g. summarizing old sessions into a durable store) behind the same `ConversationService` interface, without touching `RetrievalPipelineService` or `MemoryService`.
 - **Streaming responses** — isolated to `GeminiService.generateAnswer()`; swap in `generateContentStream` and expose SSE from `ChatController` without touching retrieval code.
 - **Auth, rate limiting, caching, observability** — these are typically Nest guards/interceptors/middleware layered around existing controllers, not internal RAG logic changes.
 
@@ -225,7 +236,7 @@ Nothing about the existing HTTP contracts broke:
 
 ### 6.1 Install dependencies
 
-No new npm packages were needed for this upgrade (BM25 and reranking are hand-rolled, and the Cohere stub doesn't import an SDK yet):
+This pass adds one new dependency, `ioredis` (the Redis client) — already in `package.json`, so a plain install picks it up:
 
 ```bash
 npm install
@@ -278,6 +289,14 @@ CHUNK_OVERLAP=150
 # ---------------------------------------------------------------------------
 RETRIEVAL_CANDIDATE_K=10
 RETRIEVAL_TOP_K=5
+
+# ---------------------------------------------------------------------------
+# Redis (short-term chat memory — see section 10)
+# ---------------------------------------------------------------------------
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=
+REDIS_TTL_SECONDS=1800
 ```
 
 Get a Gemini API key at **https://aistudio.google.com/apikey**. The app fails fast on boot with a clear error if `GEMINI_API_KEY` is missing.
@@ -299,7 +318,20 @@ npx chroma run --path ./chroma-data
 
 Either way, this starts a local Chroma server at `http://localhost:8000` and persists data under `./chroma-data`. Leave this running in its own terminal. If it isn't running when the Nest app boots, the app still starts (BM25 logs a warning and populates once you upload something; vector search will error gracefully per-request instead of crashing the server).
 
-### 6.4 Run the NestJS app
+### 6.4 Start Redis
+
+If you already have Redis running (locally, via an existing service, or any other way — no Docker changes needed), skip this step; just make sure `REDIS_HOST`/`REDIS_PORT` in `.env` point to it. Otherwise, the quickest local options are:
+
+```bash
+# Windows via WSL, or macOS/Linux with Redis installed:
+redis-server
+
+# Or via Memurai (a Redis-compatible server for native Windows), if you don't want WSL.
+```
+
+Like Chroma, this is optional at boot time — if Redis isn't reachable, the app still starts and `/chat` still works, just without memory between messages (see section 10.5).
+
+### 6.5 Run the NestJS app
 
 ```bash
 # development (watch mode)
@@ -313,11 +345,12 @@ npm run start:prod
 You should see (among other startup logs):
 ```
 [BM25Service] BM25 index warmed up with N chunk(s) from the vector store.
+[RedisClient] Redis Connected
 [ChromaVectorStoreService] Connected to ChromaDB collection "knowledge_base" at localhost:8000
 Enterprise RAG API running on http://localhost:3000
 ```
 
-### 6.5 Open the app
+### 6.6 Open the app
 
 Open your browser at:
 
@@ -352,20 +385,21 @@ Expected response (unchanged shape):
 
 Try an unsupported file or an oversized file to see graceful `400` errors instead of a crash.
 
-### 7.2 Test chat (now hybrid + reranked)
+### 7.2 Test chat (now hybrid + reranked + memory-aware)
 
-**Via the browser**: type a question in the right panel and press Enter (Shift+Enter for a newline). Watch the stage label cycle through Searching → Vector Search → BM25 Search → Re-ranking → Generating Answer, then check the confidence badge and source chips under the answer.
+**Via the browser**: type a question in the right panel and press Enter (Shift+Enter for a newline). Watch the stage label cycle through Searching → Vector Search → BM25 Search → Re-ranking → Generating Answer, then check the confidence badge and source chips under the answer. The **Session** id shown above the messages, and the **Clear Memory** button next to it, are covered in section 10.
 
-**Via curl**:
+**Via curl** — note the body is now `{ sessionId, prompt }`, not `{ question }` (see section 10.6 for why):
 ```bash
 curl -X POST http://localhost:3000/chat \
   -H "Content-Type: application/json" \
-  -d '{"question":"What is Artificial Intelligence?"}'
+  -d '{"sessionId":"demo-session-1","prompt":"What is Artificial Intelligence?"}'
 ```
 
 Expected response:
 ```json
 {
+  "sessionId": "demo-session-1",
   "answer": "…grounded answer from your uploaded documents…",
   "sources": ["your-document.pdf"],
   "confidence": "high"
@@ -375,6 +409,7 @@ Expected response:
 If the answer isn't in your knowledge base, or nothing has been uploaded yet:
 ```json
 {
+  "sessionId": "demo-session-1",
   "answer": "I couldn't find this information in the uploaded knowledge base.",
   "sources": [],
   "confidence": "low"
@@ -531,3 +566,135 @@ Expected response shape:
   "evaluatedAt": "2026-07-29T18:12:00.000Z"
 }
 ```
+
+---
+
+## 10. Redis Short-Term Memory
+
+The chatbot now remembers previous messages **within a session**, stored in Redis with a 30-minute sliding expiry. This is short-term memory only — a real conversational "thread," not long-term user profile memory (that would be a different, durable store, deliberately left for a future lesson).
+
+### 10.1 Important: `/chat`'s request/response shape changed
+
+Before this pass, `POST /chat` took `{ question }` and returned `{ answer, sources, confidence }`. Memory only makes sense per-session, so the endpoint now takes a `sessionId`:
+
+| | Before | Now |
+|---|---|---|
+| Request body | `{ "question": "..." }` | `{ "sessionId": "...", "prompt": "..." }` |
+| Response body | `{ answer, sources, confidence }` | `{ sessionId, answer, sources, confidence }` |
+
+`POST /knowledge/upload` is completely unaffected.
+
+### 10.2 New files
+
+```
+src/redis/
+├── redis.module.ts             Registers the client provider + RedisService, exports RedisService
+├── redis-client.provider.ts    ioredis client factory (DI token REDIS_CLIENT)
+└── redis.service.ts            get() / setWithExpiry() / del() — see 10.5 for the error-handling design
+
+src/memory/
+├── memory.module.ts            Imports RedisModule + RagModule; exports ConversationService
+├── memory.service.ts           Redis key naming (chat:session:<id>), JSON (de)serialization, TTL reset
+└── conversation.service.ts     load history → append user msg → run pipeline with history → append
+                                 assistant msg → save; also owns clearMemory()
+
+src/chat/dto/send-message.dto.ts   Validated { sessionId, prompt } (replaces the old chat-request.dto.ts)
+```
+
+**Small additive changes to existing files:**
+- `retrieval.types.ts` gained `ConversationMessage` (`{ role: 'user' | 'assistant', content, timestamp }`) and `MessageRole`. It lives here (not in `memory/`) so `rag/` stays self-contained — `memory/` depends on `rag/`'s types, never the reverse.
+- `RetrievalPipelineService` gained `runWithHistory(question, history)`, alongside the existing `run()` and `runWithContext()` — all three call the same private `execute()`, which now takes an optional history array. `run()`/`runWithContext()` pass `[]`, so nothing about the Evaluation module's behavior changed.
+- `PromptBuilderService.buildPrompt()` gained an optional third parameter, `history`. When present, a "Conversation History" block is inserted between the retrieved context and the question, and the system prompt gained one explicit rule: history may only be used to resolve references like "it"/"that" — it is never a source of facts, which must still come only from the retrieved context. Only the last 8 messages are replayed into any single prompt (full history still lives in Redis).
+- `rag.service.ts` lost `answerQuestion()`/`AnswerResult` — after this change nothing called them anymore (question-answering now goes through `ConversationService` → `RetrievalPipelineService` directly), so they were dead code and removed rather than left unused. `RagService` now only does ingestion.
+- `chat.module.ts` now imports `MemoryModule` instead of `RagModule` directly.
+- `index.html` gained a session bar (id display + Clear Memory button) above the chat messages; the `/chat` fetch call now sends `{ sessionId, prompt }`.
+
+### 10.3 How it works
+
+```
+POST /chat  { sessionId, prompt }
+        │
+        ▼
+ChatController.sendMessage()
+        │
+        ▼
+ConversationService.sendMessage(sessionId, prompt)
+        │
+        ├─▶ MemoryService.loadHistory(sessionId)  ──▶  RedisService.get("chat:session:<id>")
+        │        (Redis unreachable/empty → returns [])
+        │
+        ├─▶ append { role: 'user', content: prompt, timestamp }
+        │
+        ├─▶ RetrievalPipelineService.runWithHistory(prompt, history)
+        │        (the SAME hybrid search → rerank pipeline as before,
+        │         now with history threaded into the prompt)
+        │
+        ├─▶ append { role: 'assistant', content: answer, timestamp }
+        │
+        └─▶ MemoryService.saveHistory(sessionId, fullHistory)
+                 ──▶ RedisService.setWithExpiry(key, json, 1800)
+                     (resets the 30-minute TTL on every turn)
+```
+
+Each stored message is exactly `{ role, content, timestamp }`, as a JSON array under the Redis key `chat:session:<sessionId>`.
+
+### 10.4 TTL: a sliding 30-minute window
+
+`REDIS_TTL_SECONDS=1800` is applied via Redis's own `EX` option on every `SET` — meaning every time a message is saved, the 30-minute countdown **resets**. A session you keep chatting in never expires mid-conversation; one you walk away from is automatically deleted by Redis itself 30 minutes after your last message — no cron job, no manual cleanup needed.
+
+### 10.5 Security & graceful degradation
+
+- `SendMessageDto` validates `sessionId` (non-empty, ≤100 chars, letters/numbers/hyphens/underscores only — via `@Matches`) and `prompt` (non-empty, ≤2000 chars) — an empty prompt or a missing session id is rejected with a `400` before anything runs. `DELETE /chat/:sessionId` applies the same `sessionId` format check manually (path params aren't covered by the body `ValidationPipe`).
+- **Redis outages never break chat.** `RedisService.get/setWithExpiry/del` each wrap the ioredis call in try/catch and log-and-continue rather than throw — a failed load returns an empty history (the bot just won't remember earlier turns), and a failed save is a silent no-op. The ioredis client itself is configured with `enableOfflineQueue: false` and `maxRetriesPerRequest: 1` so a command fails fast (near-instantly) instead of hanging the request while ioredis retries — verified by pointing the app at an unreachable Redis port and confirming `/chat` still responded immediately (just without memory) rather than hanging.
+- The raw `Redis` client's `'error'` event is always given a listener (inside `redis-client.provider.ts`) — Node.js crashes the process on an unhandled `EventEmitter` `'error'` event, so this listener is what keeps a Redis outage from taking down the whole app.
+- Every route still funnels through the existing global `AllExceptionsFilter` — no stack traces are ever returned to the client.
+
+### 10.6 Console logs
+
+`MemoryService` and the Redis client log each stage, matching the flow above:
+```
+[RedisClient] Redis Connected
+[MemoryService] Loading Memory (session: abc123)
+[MemoryService] Memory Loaded (2 message(s))
+[RetrievalPipelineService] Question received: "..."
+[RetrievalPipelineService] Generating embedding...
+...(hybrid search / rerank logs, unchanged from section 7.2)...
+[RetrievalPipelineService] Sending context to Gemini...
+[RetrievalPipelineService] Generating final response...
+[MemoryService] Saving Memory (session: abc123)
+[MemoryService] Memory Updated
+```
+Clearing memory logs `[MemoryService] Memory Cleared (session: abc123)`.
+
+### 10.7 How to test
+
+**Via the browser** — this is the easiest way to actually feel the memory working:
+1. Open **http://localhost:3000** — a session id is generated automatically and shown above the chat (persisted in `localStorage`, so a page refresh keeps the same session).
+2. Ask something, e.g. *"What is ChromaDB?"*
+3. Ask a **follow-up that only makes sense with memory**, e.g. *"What's the difference between it and Pinecone?"* — the assistant should understand "it" refers to ChromaDB from the previous turn.
+4. Click **Clear Memory** — this calls `DELETE /chat/:sessionId`, wipes the visible conversation, and starts a brand-new session id. Ask the same follow-up again; now there's no prior turn to resolve "it" against.
+
+**Via curl:**
+```bash
+# Turn 1
+curl -X POST http://localhost:3000/chat \
+  -H "Content-Type: application/json" \
+  -d '{"sessionId":"demo-1","prompt":"What is ChromaDB?"}'
+
+# Turn 2 — same sessionId, references "it" from turn 1
+curl -X POST http://localhost:3000/chat \
+  -H "Content-Type: application/json" \
+  -d '{"sessionId":"demo-1","prompt":"How is it different from Pinecone?"}'
+
+# Clear memory for that session
+curl -X DELETE http://localhost:3000/chat/demo-1
+# -> {"sessionId":"demo-1","message":"Memory Cleared"}
+```
+
+**Verify the TTL directly** (optional, needs `redis-cli` or any Redis GUI):
+```bash
+redis-cli GET chat:session:demo-1     # the stored message array
+redis-cli TTL chat:session:demo-1     # seconds remaining, resets on every message
+```
+
+**Verify graceful degradation**: stop Redis (or point `REDIS_PORT` at a closed port) and send a chat message — you'll see `[RedisClient] Redis connection error: ...` in the logs, but `/chat` still responds (just without memory of earlier turns), and the server never crashes.

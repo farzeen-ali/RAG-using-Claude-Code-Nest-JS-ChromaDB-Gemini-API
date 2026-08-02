@@ -1,0 +1,3 @@
+docker pull redis:7-alpine
+docker run -d --name ai-redis -p 6379:6379 --restart unless-stopped redis:7-alpine
+docker ps

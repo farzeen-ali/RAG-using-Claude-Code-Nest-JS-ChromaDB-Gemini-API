@@ -1,0 +1,269 @@
+You are a Principal AI Backend Engineer, Senior NestJS Architect, AI Memory Systems Expert and Redis Specialist.
+
+I already have a production-ready RAG application built using:
+
+- NestJS
+- TypeScript
+- Gemini 2.5 Flash
+- ChromaDB
+- PDF Upload
+- Recursive Chunking
+- Hybrid Search
+- BM25
+- Re-ranking
+- HTML + Tailwind CSS
+
+DO NOT rebuild the project.
+
+ONLY extend the existing project.
+
+====================================================
+
+GOAL
+
+====================================================
+
+Implement Short-Term Memory using Redis.
+
+The chatbot should remember previous messages during the current session.
+
+====================================================
+
+TECH STACK
+
+====================================================
+
+NestJS
+
+Redis
+
+ioredis
+
+@nestjs/config
+
+class-validator
+
+No Docker changes are required because Redis is already running.
+
+====================================================
+
+REDIS CONNECTION
+
+====================================================
+
+Read configuration from
+
+.env
+
+Example
+
+REDIS_HOST=localhost
+
+REDIS_PORT=6379
+
+====================================================
+
+MEMORY DESIGN
+
+====================================================
+
+Every chat session must have a unique sessionId.
+
+Store conversation history in Redis.
+
+Each message should contain
+
+role
+
+content
+
+timestamp
+
+====================================================
+
+CHAT FLOW
+
+====================================================
+
+User sends
+
+sessionId
+
+prompt
+
+↓
+
+Load conversation history from Redis
+
+↓
+
+Append user message
+
+↓
+
+Send complete conversation to Gemini
+
+↓
+
+Receive AI response
+
+↓
+
+Append assistant response
+
+↓
+
+Save updated conversation in Redis
+
+↓
+
+Return response
+
+====================================================
+
+TTL
+
+====================================================
+
+Conversation expires after
+
+30 minutes
+
+Automatically remove inactive sessions.
+
+====================================================
+
+NEW ENDPOINT
+
+====================================================
+
+POST
+
+/chat
+
+Body
+
+{
+  "sessionId":"abc123",
+  "prompt":"Hello"
+}
+
+====================================================
+
+CLEAR MEMORY
+
+====================================================
+
+Create
+
+DELETE
+
+/chat/:sessionId
+
+Delete all conversation memory.
+
+====================================================
+
+UI
+
+====================================================
+
+Update the existing HTML + Tailwind interface.
+
+Generate a random session ID automatically.
+
+Display Session ID in the UI.
+
+Add
+
+Clear Memory
+
+button.
+
+Display conversation like ChatGPT.
+
+Auto Scroll
+
+Typing Animation
+
+Loading Indicator
+
+Responsive Design
+
+====================================================
+
+LOGGING
+
+====================================================
+
+Console Logs
+
+Redis Connected
+
+Loading Memory
+
+Memory Loaded
+
+Sending Context to Gemini
+
+Saving Memory
+
+Memory Updated
+
+Memory Cleared
+
+====================================================
+
+SECURITY
+
+====================================================
+
+Validate all inputs.
+
+Reject empty prompts.
+
+Limit prompt length.
+
+Handle Redis connection failures gracefully.
+
+Never expose stack traces.
+
+====================================================
+
+ARCHITECTURE
+
+====================================================
+
+Create
+
+RedisModule
+
+RedisService
+
+MemoryService
+
+ConversationService
+
+Keep the code modular.
+
+Follow SOLID principles.
+
+====================================================
+
+OUTPUT
+
+====================================================
+
+Generate the complete implementation.
+
+Explain every new file.
+
+Provide npm install commands.
+
+Provide .env example.
+
+Explain how Redis Memory works.
+
+Explain how to test the application.
+
+Keep the code production-ready and beginner-friendly.

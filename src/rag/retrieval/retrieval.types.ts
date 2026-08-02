@@ -30,3 +30,18 @@ export interface RetrievedContextChunk {
   filename: string;
   score: number;
 }
+
+export type MessageRole = 'user' | 'assistant';
+
+/**
+ * One turn of short-term chat memory, as persisted in Redis by
+ * MemoryService and threaded into the prompt by PromptBuilderService.
+ * Lives here (rather than in the memory/ module) so rag/ stays the
+ * self-contained, foundational module — memory/ depends on rag/'s types,
+ * never the other way around.
+ */
+export interface ConversationMessage {
+  role: MessageRole;
+  content: string;
+  timestamp: string;
+}
