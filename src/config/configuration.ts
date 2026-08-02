@@ -24,6 +24,12 @@ export interface AppConfig {
   evaluation: {
     datasetPath: string;
   };
+  redis: {
+    host: string;
+    port: number;
+    password?: string;
+    ttlSeconds: number;
+  };
 }
 
 export default (): AppConfig => ({
@@ -56,5 +62,11 @@ export default (): AppConfig => ({
   evaluation: {
     datasetPath:
       process.env.EVALUATION_DATASET_PATH ?? 'evaluation-dataset.json',
+  },
+  redis: {
+    host: process.env.REDIS_HOST ?? 'localhost',
+    port: parseInt(process.env.REDIS_PORT ?? '6379', 10),
+    password: process.env.REDIS_PASSWORD || undefined,
+    ttlSeconds: parseInt(process.env.REDIS_TTL_SECONDS ?? '1800', 10),
   },
 });

@@ -103,6 +103,19 @@
 
       <!-- Right: Chat -->
       <section class="flex flex-col min-h-0">
+        <div class="shrink-0 border-b border-slate-800 bg-slate-900/40 px-4 py-2 flex items-center justify-between gap-2 text-xs">
+          <div class="flex items-center gap-2 text-slate-500 min-w-0">
+            <span class="shrink-0">Session:</span>
+            <code id="session-id-display" class="text-slate-400 truncate"></code>
+          </div>
+          <button id="clear-memory-btn" type="button"
+            class="shrink-0 text-slate-400 hover:text-red-300 border border-slate-700 hover:border-red-900 rounded-lg px-2.5 py-1 transition-colors flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 7h12M9 7V4h6v3m-8 0 1 13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-13" />
+            </svg>
+            Clear Memory
+          </button>
+        </div>
         <div id="messages" class="flex-1 overflow-y-auto px-6 py-6 flex flex-col gap-4">
           <div id="empty-state" class="m-auto text-center text-slate-500 max-w-sm">
             <p class="text-sm">Upload a PDF on the left, then ask a question about it here.</p>
@@ -151,15 +164,59 @@
   const indexedListEl = document.getElementById('indexed-list');
 
   const messagesEl = document.getElementById('messages');
-  const emptyStateEl = document.getElementById('empty-state');
   const chatForm = document.getElementById('chat-form');
   const questionInput = document.getElementById('question-input');
   const sendBtn = document.getElementById('send-btn');
+  const sessionIdDisplay = document.getElementById('session-id-display');
+  const clearMemoryBtn = document.getElementById('clear-memory-btn');
 
   const statusDot = document.getElementById('status-dot');
   const statusLabel = document.getElementById('status-label');
 
   let selectedFile = null;
+
+  // ---------- Session (short-term memory) ----------
+  const SESSION_STORAGE_KEY = 'rag-session-id';
+
+  function generateSessionId() {
+    if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+      return window.crypto.randomUUID();
+    }
+    return `sess-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  }
+
+  let sessionId = localStorage.getItem(SESSION_STORAGE_KEY) || generateSessionId();
+  localStorage.setItem(SESSION_STORAGE_KEY, sessionId);
+
+  function renderSessionId() {
+    sessionIdDisplay.textContent = sessionId;
+    sessionIdDisplay.title = sessionId;
+  }
+  renderSessionId();
+
+  function resetEmptyState() {
+    messagesEl.innerHTML = `
+      <div id="empty-state" class="m-auto text-center text-slate-500 max-w-sm">
+        <p class="text-sm">Upload a PDF on the left, then ask a question about it here.</p>
+      </div>
+    `;
+  }
+
+  clearMemoryBtn.addEventListener('click', async () => {
+    clearMemoryBtn.disabled = true;
+    try {
+      await fetch(`/chat/${encodeURIComponent(sessionId)}`, { method: 'DELETE' });
+    } catch {
+      // Best-effort — even if the request fails, we still start a fresh
+      // session client-side so the user isn't stuck.
+    } finally {
+      sessionId = generateSessionId();
+      localStorage.setItem(SESSION_STORAGE_KEY, sessionId);
+      renderSessionId();
+      resetEmptyState();
+      clearMemoryBtn.disabled = false;
+    }
+  });
 
   // ---------- Health check ----------
   fetch('/health').then((res) => {
@@ -309,6 +366,7 @@
   }
 
   function appendMessage(role, text, sources, confidence) {
+    const emptyStateEl = document.getElementById('empty-state');
     if (emptyStateEl) emptyStateEl.remove();
 
     const column = document.createElement('div');
@@ -421,7 +479,7 @@
       const res = await fetch('/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question }),
+        body: JSON.stringify({ sessionId, prompt: question }),
       });
       const data = await res.json().catch(() => ({}));
 

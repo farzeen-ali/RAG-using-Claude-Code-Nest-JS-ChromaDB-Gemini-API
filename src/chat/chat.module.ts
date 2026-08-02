@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
-import { RagModule } from '../rag/rag.module';
+import { MemoryModule } from '../memory/memory.module';
 import { ChatController } from './chat.controller';
 
 @Module({
-  imports: [RagModule],
+  imports: [MemoryModule],
   controllers: [ChatController],
 })
 export class ChatModule {}

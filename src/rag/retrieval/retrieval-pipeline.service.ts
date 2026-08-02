@@ -13,6 +13,7 @@ import type { IRerankProvider } from '../rerank/rerank-provider.interface';
 import { HybridSearchService } from './hybrid-search.service';
 import type {
   ConfidenceLevel,
+  ConversationMessage,
   RetrievedContextChunk,
   ScoredChunk,
 } from './retrieval.types';
@@ -35,10 +36,9 @@ const MEDIUM_CONFIDENCE_THRESHOLD = 0.4;
 
 /**
  * The heart of the hybrid RAG pipeline: sanitize -> embed -> hybrid search
- * (vector + BM25) -> rerank -> prompt -> generate. Extracted out of
- * RagService so ingestion and retrieval are independently testable and
- * replaceable — RagService is now just a thin facade that controllers
- * depend on, delegating the actual question-answering to this service.
+ * (vector + BM25) -> rerank -> prompt (+ optional conversation history) ->
+ * generate. Extracted out of RagService so ingestion and retrieval are
+ * independently testable and replaceable.
  */
 @Injectable()
 export class RetrievalPipelineService {
@@ -60,26 +60,39 @@ export class RetrievalPipelineService {
     this.finalTopK = this.configService.get('retrieval.topK', { infer: true });
   }
 
-  /** Used by ChatController via RagService — the existing, unchanged /chat contract. */
+  /** Single-turn retrieval with no conversation memory (used by the Evaluation module). */
   async run(rawQuestion: string): Promise<PipelineResult> {
-    const { answer, sources, confidence } = await this.execute(rawQuestion);
+    const { answer, sources, confidence } = await this.execute(rawQuestion, []);
     return { answer, sources, confidence };
   }
 
   /**
    * Same pipeline as run(), but also returns the retrieved context chunks
    * that were actually sent to Gemini. Used by the Evaluation module, which
-   * needs to display and score the context — /chat intentionally never
-   * exposes this, to keep its response shape exactly as it was before.
+   * needs to display and score the context.
    */
   async runWithContext(
     rawQuestion: string,
   ): Promise<PipelineResultWithContext> {
-    return this.execute(rawQuestion);
+    return this.execute(rawQuestion, []);
+  }
+
+  /**
+   * Same pipeline, plus a short-term conversation history (see
+   * ConversationService) threaded into the prompt so the model can resolve
+   * references like "it" or "that" across turns. Used by the memory-aware
+   * /chat endpoint.
+   */
+  async runWithHistory(
+    rawQuestion: string,
+    history: ConversationMessage[],
+  ): Promise<PipelineResultWithContext> {
+    return this.execute(rawQuestion, history);
   }
 
   private async execute(
     rawQuestion: string,
+    history: ConversationMessage[],
   ): Promise<PipelineResultWithContext> {
     const question = sanitizeQuestion(rawQuestion);
     this.logger.log(`Question received: "${question}"`);
@@ -116,6 +129,7 @@ export class RetrievalPipelineService {
     const { systemInstruction, userPrompt } = this.promptBuilder.buildPrompt(
       question,
       reranked,
+      history,
     );
 
     this.logger.log('Sending context to Gemini...');
